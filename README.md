@@ -1,2 +1,2 @@
-# staring
-Staring can be a form of harassment.
+# staring can be a form of harassment
+it's true
