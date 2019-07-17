@@ -12,46 +12,122 @@ local ENTITY_CLASSES = {
     group = players,
     width = 10,
     height = 10,
+    state = 'default',
+    stateTime = 0.00,
+    timeSinceLastDash = 0.00,
+    facingX = 1,
+    facingY = 0,
     update = function(self, dt)
-      -- Check inputs
+      -- Update timers
+      self.stateTime = self.stateTime + dt
+      self.timeSinceLastDash = self.timeSinceLastDash + dt
+      -- Transition states
+      if self.state == 'dashing' and self.stateTime > 0.30 then
+        self:setState('default')
+      elseif self.state == 'staring' and self.stateTime > 0.20 and not love.keyboard.isDown('space') then 
+        self:setState('default')
+      end
+      self:updateFacing()
+      -- Degrade velocity while dashing or staring
+      if self.state == 'dashing' or self.state == 'staring' then
+        self.vx = self.vx * 0.85
+        self.vy = self.vy * 0.85
+      -- Control velocity with inputs
+      elseif self.state == 'default' then
+        local dirX, dirY = self:getInputDirection()
+        self.vx = 0.7 * self.vx + 0.3 * dirX * 65
+        self.vy = 0.7 * self.vy + 0.3 * dirY * 65
+      end
+      -- Apply velocity
+      self:applyVelocity(dt)
+    end,
+    draw = function(self)
+      love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
+      love.graphics.rectangle('fill', self.x, self.y, self.width, self.height)
+      if self.state == 'staring' then
+        local x1 = self.x + self.width / 2
+        local y1 = self.y + self.height / 2
+        local x2 = x1 + 400 * self.facingX
+        local y2 = y1 + 400 * self.facingY
+        love.graphics.setColor(1, 0, 0)
+        drawPixelatedLine(x1, y1, x2, y2)
+      end
+    end,
+    keypressed = function(self, key)
+      if key == 'space' then
+        self:startStaring()
+      elseif key == 'lshift' then
+        self:dash()
+      end
+    end,
+    getInputDirection = function(self)
       local isPressingUp = love.keyboard.isDown('up') or love.keyboard.isDown('w')
       local isPressingLeft = love.keyboard.isDown('left') or love.keyboard.isDown('a')
       local isPressingDown = love.keyboard.isDown('down') or love.keyboard.isDown('s')
       local isPressingRight = love.keyboard.isDown('right') or love.keyboard.isDown('d')
-      local moveX = (isPressingRight and 1 or 0) - (isPressingLeft and 1 or 0)
-      local moveY = (isPressingDown and 1 or 0) - (isPressingUp and 1 or 0)
-      -- Adjust velocity
-      local speed = 50 * ((moveX == 0 or moveY == 0) and 1.000 or 0.707)
-      self.vx = 0.7 * self.vx + 0.3 * moveX * speed
-      self.vy = 0.7 * self.vy + 0.3 * moveY * speed
-      -- Apply velocity
-      self:applyVelocity(dt)
+      local dirX = (isPressingRight and 1 or 0) - (isPressingLeft and 1 or 0)
+      local dirY = (isPressingDown and 1 or 0) - (isPressingUp and 1 or 0)
+      if dirX ~= 0 and dirY ~= 0 then
+        dirX = dirX * 0.707
+        dirY = dirY * 0.707
+      end
+      return dirX, dirY
+    end,
+    updateFacing = function(self)
+      local dirX, dirY = self:getInputDirection()
+      if dirX ~= 0 or dirY ~= 0 then
+        self.facingX = dirX
+        self.facingY = dirY
+      end
+    end,
+    dash = function(self)
+      if (self.state == 'default' or self.state == 'staring') and self.timeSinceLastDash > 0.40 then
+        local dirX, dirY = self:getInputDirection()
+        if dirX ~= 0 or dirY ~= 0 then
+          self.vx = 400 * dirX
+          self.vy = 400 * dirY
+          self.timeSinceLastDash = 0.00
+          self:setState('dashing')
+        end
+      end
+    end,
+    startStaring = function(self)
+      self:setState('staring')
+    end,
+    setState = function(self, state)
+      self.state = state
+      self.stateTime = 0.00
     end
   },
   eyebaddie = {
     group = eyebaddies,
     width = 12,
     height = 12,
-    anim = 'passive',
-    animTime = 0.00,
+    state = 'default',
+    stateTime = 0.00,
     staringTarget = nil,
     update = function(self, dt)
-      self.animTime = self.animTime + dt
+      self.stateTime = self.stateTime + dt
     end,
     draw = function(self)
       love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
       love.graphics.rectangle('fill', self.x, self.y, self.width, self.height)
-      if self.anim == 'staring' then
-        local x1, y1 = self.x + self.width / 2, self. y + self.height / 2
-        local x2, y2 = self.staringTarget.x + self.staringTarget.width / 2, self.staringTarget. y + self.staringTarget.height / 2
+      if self.state == 'staring' then
+        local x1 = self.x + self.width / 2
+        local y1 = self.y + self.height / 2
+        local x2 = self.staringTarget.x + self.staringTarget.width / 2
+        local y2 = self.staringTarget. y + self.staringTarget.height / 2
         love.graphics.setColor(1, 0, 0)
         drawPixelatedLine(x1, y1, x2, y2)
       end
     end,
     startStaring = function(self, target)
-      self.anim = 'staring'
-      self.animTime = 0.00
+      self:setState('staring')
       self.staringTarget = target
+    end,
+    setState = function(self, state)
+      self.state = state
+      self.stateTime = 0.00
     end
   }
 }
@@ -86,6 +162,12 @@ function love.draw()
   end
 end
 
+function love.keypressed(...)
+  for _, entity in ipairs(entities) do
+    entity:keypressed(...)
+  end
+end
+
 -- Spawns a new game entity
 function spawnEntity(className, params)
   -- Create a default entity
@@ -109,6 +191,7 @@ function spawnEntity(className, params)
       love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
       love.graphics.rectangle('fill', self.x, self.y, self.width, self.height)
     end,
+    keypressed = function(self, key) end,
     addToGame = function(self)
       table.insert(entities, self)
       if self.group then
