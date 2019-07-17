@@ -1,15 +1,17 @@
 -- Assets
--- local spriteSheet
+local spriteSheet
 
 -- Game variables
-local player
-local entities
+local entities = {}
+local players = {}
+local eyebaddies = {}
 
 -- Entity classes
 local ENTITY_CLASSES = {
   player = {
+    group = players,
     width = 10,
-    height = 8,
+    height = 10,
     update = function(self, dt)
       -- Check inputs
       local isPressingUp = love.keyboard.isDown('up') or love.keyboard.isDown('w')
@@ -27,15 +29,29 @@ local ENTITY_CLASSES = {
     end
   },
   eyebaddie = {
-    width = 15,
-    height = 10,
+    group = eyebaddies,
+    width = 12,
+    height = 12,
+    anim = 'passive',
+    animTime = 0.00,
+    staringTarget = nil,
+    update = function(self, dt)
+      self.animTime = self.animTime + dt
+    end,
     draw = function(self)
       love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
       love.graphics.rectangle('fill', self.x, self.y, self.width, self.height)
-      local x1, y1 = self.x + self.width / 2, self. y + self.height / 2
-      local x2, y2 = player.x + player.width / 2, player. y + player.height / 2
-      love.graphics.setColor(1, 0, 0)
-      drawPixelatedLine(x1, y1, x2, y2)
+      if self.anim == 'staring' then
+        local x1, y1 = self.x + self.width / 2, self. y + self.height / 2
+        local x2, y2 = self.staringTarget.x + self.staringTarget.width / 2, self.staringTarget. y + self.staringTarget.height / 2
+        love.graphics.setColor(1, 0, 0)
+        drawPixelatedLine(x1, y1, x2, y2)
+      end
+    end,
+    startStaring = function(self, target)
+      self.anim = 'staring'
+      self.animTime = 0.00
+      self.staringTarget = target
     end
   }
 }
@@ -44,11 +60,13 @@ function love.load()
   -- Set default filter to nearest to allow crisp pixel art
   love.graphics.setDefaultFilter('nearest', 'nearest')
   -- Load assets
-  -- spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
-  -- Create entities
-  entities = {}
-  player = spawnEntity('player', { x = 30, y = 30 })
-  spawnEntity('eyebaddie', { x = 60, y = 60 })
+  spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
+  -- Spawn entities
+  spawnEntity('player', { x = 30, y = 30 })
+  for i = 1, 50 do
+    spawnEntity('eyebaddie', { x = math.random(0, 225 - 12), y = math.random(0, 225 - 12) })
+  end
+  eyebaddies[1]:startStaring(players[1])
 end
 
 function love.update(dt)
@@ -61,9 +79,9 @@ end
 function love.draw()
   -- Clear the screen
   love.graphics.clear(247 / 255, 247 / 255, 247 / 255)
-  love.graphics.setColor(1, 1, 1)
   -- Draw entities
   for _, entity in ipairs(entities) do
+    love.graphics.setColor(1, 1, 1)
     entity:draw()
   end
 end
@@ -90,6 +108,28 @@ function spawnEntity(className, params)
     draw = function(self)
       love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
       love.graphics.rectangle('fill', self.x, self.y, self.width, self.height)
+    end,
+    addToGame = function(self)
+      table.insert(entities, self)
+      if self.group then
+        table.insert(self.group, self)
+      end
+    end,
+    removeFromGame = function(self)
+      for i = 1, #entities do
+        if entities[i] == self then
+          table.remove(entities, i)
+          break
+        end
+      end
+      if self.group then
+        for i = 1, #self.group do
+          if self.group[i] == self then
+            table.remove(self.group, i)
+            break
+          end
+        end
+      end
     end
   }
   -- Add properties from the class
@@ -100,9 +140,8 @@ function spawnEntity(className, params)
   for k, v in pairs(params) do
     entity[k] = v
   end
-  -- Add it to the list of entities
-  table.insert(entities, entity)
-  -- Initialize and return the entity
+  -- Add it to the game, initialize it, and return it
+  entity:addToGame()
   entity:init()
   return entity
 end
