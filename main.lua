@@ -39,6 +39,10 @@ local ENTITY_CLASSES = {
       end
       -- Apply velocity
       self:applyVelocity(dt)
+      -- Check for collisions
+      for _, eyebaddie in ipairs(eyebaddies) do
+        handleCollision(self, eyebaddie)
+      end
     end,
     draw = function(self)
       love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
@@ -97,6 +101,7 @@ local ENTITY_CLASSES = {
   eyebaddie = {
     group = eyebaddies,
     radius = 6,
+    isStationary = true,
     state = 'default',
     stateTime = 0.00,
     staringTarget = nil,
@@ -168,6 +173,7 @@ function spawnEntity(className, params)
     radius = 10,
     vx = 0,
     vy = 0,
+    isStationary = false,
     init = function(self) end,
     update = function(self, dt)
       self:applyVelocity(dt)
@@ -229,9 +235,39 @@ function drawSprite(sx, sy, sw, sh, x, y, flipHorizontal, flipVertical, rotation
     sw / 2, sh / 2)
 end
 
--- Determine whether two rectangles are overlapping
-function rectsOverlapping(x1, y1, w1, h1, x2, y2, w2, h2)
-  return x1 + w1 > x2 and x2 + w2 > x1 and y1 + h1 > y2 and y2 + h2 > y1
+-- Moves two circular entities apart so they're not overlapping
+function handleCollision(entity1, entity2)
+  -- Figure out how far apart the entities are
+  local dx = entity2.x - entity1.x
+  local dy = entity2.y - entity1.y
+  if dx == 0 and dy == 0 then
+    dy = 0.1
+  end
+  local squareDist = dx * dx + dy * dy
+  local sumRadii = entity1.radius + entity2.radius
+  -- If the entities are close enough, they're colliding
+  if squareDist < sumRadii * sumRadii then
+    local dist = math.sqrt(squareDist)
+    local pushAmount = sumRadii - dist
+    -- Push one away from the other
+    if entity2.isStationary and not entity1.isStationary then
+      entity1.x = entity1.x - pushAmount * dx / dist
+      entity1.y = entity1.y - pushAmount * dy / dist
+    elseif entity1.isStationary and not entity2.isStationary then
+      entity2.x = entity2.x + pushAmount * dx / dist
+      entity2.y = entity2.y + pushAmount * dy / dist
+    -- Push them both away from each other
+    else
+      entity1.x = entity1.x - (pushAmount / 2) * dx / dist
+      entity1.y = entity1.y - (pushAmount / 2) * dy / dist
+      entity2.x = entity2.x + (pushAmount / 2) * dx / dist
+      entity2.y = entity2.y + (pushAmount / 2) * dy / dist
+    end
+    return true
+  -- If the entities are far from one another, they're not colliding
+  else
+    return false
+  end
 end
 
 -- Draws a line by drawing little pixely squares
