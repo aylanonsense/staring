@@ -16,6 +16,9 @@ local ENTITY_CLASSES = {
     timeSinceLastDash = 0.00,
     facingX = 1,
     facingY = 0,
+    stareX = nil,
+    stareY = nil,
+    stareTarget = nil,
     update = function(self, dt)
       -- Update timers
       self.stateTime = self.stateTime + dt
@@ -43,13 +46,31 @@ local ENTITY_CLASSES = {
       for _, eyebaddie in ipairs(eyebaddies) do
         handleCollision(self, eyebaddie)
       end
+      -- Update the point the player is staring at
+      self.stareX = nil
+      self.stareY = nil
+      self.stareTarget = nil
+      if self.state == 'staring' then
+        self.stareX = self.x + 999 * self.facingX
+        self.stareY = self.y + 999 * self.facingY
+        local stareSquareDist = nil
+        for _, eyebaddie in ipairs(eyebaddies) do
+          local isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius)
+          if isIntersecting and (not stareSquareDist or stareSquareDist > intersectSquareDist) then
+            self.stareX = xIntersect
+            self.stareY = yIntersect
+            self.stareTarget = eyebaddie
+            stareSquareDist = intersectSquareDist
+          end
+        end
+      end
     end,
     draw = function(self)
       love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
       love.graphics.circle('fill', self.x, self.y, self.radius)
-      if self.state == 'staring' then
+      if self.stareX and self.stareY then
         love.graphics.setColor(1, 0, 0)
-        drawPixelatedLine(self.x, self.y, self.x + 400 * self.facingX, self.y + 400 * self.facingY)
+        drawPixelatedLine(self.x, self.y, self.stareX, self.stareY)
       end
     end,
     keypressed = function(self, key)
@@ -135,7 +156,7 @@ function love.load()
   -- Spawn entities
   spawnEntity('player', { x = 30, y = 30 })
   for i = 1, 50 do
-    spawnEntity('eyebaddie', { x = math.random(0, 225 - 12), y = math.random(0, 225 - 12) })
+    spawnEntity('eyebaddie', { x = math.random(20, 205), y = math.random(20, 205) })
   end
   eyebaddies[1]:startStaring(players[1])
 end
@@ -286,4 +307,36 @@ function drawPixelatedLine(x1, y1, x2, y2)
       love.graphics.rectangle('fill', x, y, 1, 1)
     end
   end
+end
+
+function calcCircleLineIntersection(x1, y1, x2, y2, cx, cy, r)
+  local dx = x2 - x1
+  local dy = y2 - y1
+  local A = dx * dx + dy * dy
+  local B = 2 * (dx * (x1 - cx) + dy * (y1 - cy))
+  local C = (x1 - cx) * (x1 - cx) + (y1 - cy) * (y1 - cy) - r * r
+  local det = B * B - 4 * A * C
+  if det >= 0 then
+    local rootDet = math.sqrt(det)
+    local t1 = (-B + rootDet) / (2 * A)
+    local t2 = (-B - rootDet) / (2 * A)
+    local xIntersection1 = x1 + t1 * dx
+    local yIntersection1 = y1 + t1 * dy
+    local xIntersection2 = x1 + t2 * dx
+    local yIntersection2 = y1 + t2 * dy
+    local squareDist1 = (xIntersection1 - x1) * (xIntersection1 - x1) + (yIntersection1 - y1) * (yIntersection1 - y1)
+    local squareDist2 = (xIntersection2 - x1) * (xIntersection2 - x1) + (yIntersection2 - y1) * (yIntersection2 - y1)
+    local xMin = math.min(x1, x2)
+    local xMax = math.max(x1, x2)
+    local yMin = math.min(y1, y2)
+    local yMax = math.max(y1, y2)
+    if squareDist1 < squareDist2 and xMin - 1 < xIntersection1 and xIntersection1 < xMax + 1 and yMin - 1 < yIntersection1 and yIntersection1 < yMax + 1 then
+      return true, xIntersection1, yIntersection1, squareDist1
+    elseif xMin - 1 < xIntersection2 and xIntersection2 < xMax + 1 and yMin - 1 < yIntersection2 and yIntersection2 < yMax + 1 then
+      return true, xIntersection2, yIntersection2, squareDist2
+    else
+      return false
+    end
+  end
+  return false
 end
