@@ -10,8 +10,7 @@ local eyebaddies = {}
 local ENTITY_CLASSES = {
   player = {
     group = players,
-    width = 10,
-    height = 10,
+    radius = 5,
     state = 'default',
     stateTime = 0.00,
     timeSinceLastDash = 0.00,
@@ -43,14 +42,10 @@ local ENTITY_CLASSES = {
     end,
     draw = function(self)
       love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
-      love.graphics.rectangle('fill', self.x, self.y, self.width, self.height)
+      love.graphics.circle('fill', self.x, self.y, self.radius)
       if self.state == 'staring' then
-        local x1 = self.x + self.width / 2
-        local y1 = self.y + self.height / 2
-        local x2 = x1 + 400 * self.facingX
-        local y2 = y1 + 400 * self.facingY
         love.graphics.setColor(1, 0, 0)
-        drawPixelatedLine(x1, y1, x2, y2)
+        drawPixelatedLine(self.x, self.y, self.x + 400 * self.facingX, self.y + 400 * self.facingY)
       end
     end,
     keypressed = function(self, key)
@@ -101,8 +96,7 @@ local ENTITY_CLASSES = {
   },
   eyebaddie = {
     group = eyebaddies,
-    width = 12,
-    height = 12,
+    radius = 6,
     state = 'default',
     stateTime = 0.00,
     staringTarget = nil,
@@ -111,14 +105,10 @@ local ENTITY_CLASSES = {
     end,
     draw = function(self)
       love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
-      love.graphics.rectangle('fill', self.x, self.y, self.width, self.height)
+      love.graphics.circle('fill', self.x, self.y, self.radius)
       if self.state == 'staring' then
-        local x1 = self.x + self.width / 2
-        local y1 = self.y + self.height / 2
-        local x2 = self.staringTarget.x + self.staringTarget.width / 2
-        local y2 = self.staringTarget. y + self.staringTarget.height / 2
         love.graphics.setColor(1, 0, 0)
-        drawPixelatedLine(x1, y1, x2, y2)
+        drawPixelatedLine(self.x, self.y, self.staringTarget.x, self.staringTarget.y)
       end
     end,
     startStaring = function(self, target)
@@ -175,8 +165,7 @@ function spawnEntity(className, params)
     type = className,
     x = 0,
     y = 0,
-    width = 25,
-    height = 25,
+    radius = 10,
     vx = 0,
     vy = 0,
     init = function(self) end,
@@ -189,7 +178,7 @@ function spawnEntity(className, params)
     end,
     draw = function(self)
       love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
-      love.graphics.rectangle('fill', self.x, self.y, self.width, self.height)
+      love.graphics.circle('fill', self.x, self.y, self.radius)
     end,
     keypressed = function(self, key) end,
     addToGame = function(self)
