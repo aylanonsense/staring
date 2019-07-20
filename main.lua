@@ -1,3 +1,12 @@
+-- Constants
+local COLORS = {
+  BLACK = { 11 / 255, 11 / 255, 4 / 255 },
+  DARK_GREY = { 80 / 255, 79 / 255, 68 / 255 },
+  PURPLE = { 157 / 255, 52 / 255, 204 / 255 },
+  RED = { 253 / 255, 42 / 255, 4 / 255 },
+  PURE_WHITE = { 1, 1, 1 }
+}
+
 -- Assets
 local spriteSheet
 
@@ -66,10 +75,10 @@ local ENTITY_CLASSES = {
       end
     end,
     draw = function(self)
-      love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
+      love.graphics.setColor(COLORS.PURPLE)
       love.graphics.circle('fill', self.x, self.y, self.radius)
       if self.stareX and self.stareY then
-        love.graphics.setColor(1, 0, 0)
+        love.graphics.setColor(COLORS.RED)
         drawPixelatedLine(self.x, self.y, self.stareX, self.stareY)
       end
     end,
@@ -121,25 +130,60 @@ local ENTITY_CLASSES = {
   },
   eyebaddie = {
     group = eyebaddies,
-    radius = 6,
+    size = 1,
+    radius = 0,
     isStationary = true,
     state = 'default',
     stateTime = 0.00,
-    staringTarget = nil,
+    stareTarget = nil,
+    eyeWhiteDist = 1,
+    eyeWhiteAngle = 0,
+    timeUntilUpdateEyeWhite = 0.00,
+    pupilDist = 1,
+    pupilAngle = 0,
+    timeUntilUpdatePupil = 0.00,
+    init = function(self)
+      self.radius = 5 + 2 * self.size
+    end,
     update = function(self, dt)
       self.stateTime = self.stateTime + dt
+      self.timeUntilUpdateEyeWhite = self.timeUntilUpdateEyeWhite - dt
+      self.timeUntilUpdatePupil = self.timeUntilUpdatePupil - dt
+      if self.stareTarget then
+        local dx = self.stareTarget.x - self.x
+        local dy = self.stareTarget.y - self.y
+        local dist = math.sqrt(dx * dx + dy * dy)
+        local angle = math.atan2(dy, dx)
+        if self.timeUntilUpdatePupil < 0 then
+          self.timeUntilUpdatePupil = 0.05 + 0.20 * math.random()
+          self.pupilDist = 0.3 + math.min(dist / 100, 0.7)
+          self.pupilAngle = angle
+        end
+        if self.timeUntilUpdateEyeWhite < 0 then
+          self.timeUntilUpdateEyeWhite = 0.10 + 0.30 * math.random()
+          self.eyeWhiteDist = 0.6 + math.min(dist / 200, 0.4)
+          self.eyeWhiteAngle = angle
+        end
+      end
     end,
     draw = function(self)
-      love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
-      love.graphics.circle('fill', self.x, self.y, self.radius)
-      if self.state == 'staring' then
-        love.graphics.setColor(1, 0, 0)
-        drawPixelatedLine(self.x, self.y, self.staringTarget.x, self.staringTarget.y)
-      end
+      local eyeWhiteX = self.eyeWhiteDist * 0.25 * self.radius * math.cos(self.eyeWhiteAngle)
+      local eyeWhiteY = self.eyeWhiteDist * 0.35 * self.radius * math.sin(self.eyeWhiteAngle)
+      local pupilX = self.pupilDist * 0.35 * self.radius * math.cos(self.pupilAngle)
+      local pupilY = self.pupilDist * 0.25 * self.radius * math.sin(self.pupilAngle)
+      local pupilSize = self.size > 2 and 3 or 2
+      love.graphics.setColor(COLORS.PURE_WHITE)
+      -- Draw ball
+      drawSprite(1 + 30 * (4 - self.size), 1, 29, 29, self.x - 14.5, self.y - 14.5)
+      -- Draw white of eyes
+      drawSprite(1 + 20 * (4 - self.size), 31, 19, 20, self.x + eyeWhiteX - 9.5, self.y + eyeWhiteY - 10)
+      -- Draw pupil
+      love.graphics.setColor(COLORS.DARK_GREY)
+      love.graphics.rectangle('fill', self.x + eyeWhiteX + pupilX - pupilSize / 2, self.y + eyeWhiteY + pupilY - pupilSize / 2, pupilSize, pupilSize)
     end,
     startStaring = function(self, target)
       self:setState('staring')
-      self.staringTarget = target
+      self.stareTarget = target
     end,
     setState = function(self, state)
       self.state = state
@@ -155,10 +199,18 @@ function love.load()
   spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
   -- Spawn entities
   spawnEntity('player', { x = 30, y = 30 })
-  for i = 1, 50 do
-    spawnEntity('eyebaddie', { x = math.random(20, 205), y = math.random(20, 205) })
+  for i = 1, 30 do
+    spawnEntity('eyebaddie', { x = math.random(20, 205), y = math.random(20, 205), size = math.random(1, 4) })
+    eyebaddies[i]:startStaring(players[1])
   end
-  eyebaddies[1]:startStaring(players[1])
+  -- Move the eyebaddies so they aren't overlapping
+  for iteration = 1, 3 do
+    for i = 1, #eyebaddies do
+      for j = i + 1, #eyebaddies do
+        handleCollision(eyebaddies[i], eyebaddies[j])
+      end
+    end
+  end
 end
 
 function love.update(dt)
@@ -170,7 +222,7 @@ end
 
 function love.draw()
   -- Clear the screen
-  love.graphics.clear(247 / 255, 247 / 255, 247 / 255)
+  love.graphics.clear(COLORS.BLACK)
   -- Draw entities
   for _, entity in ipairs(entities) do
     love.graphics.setColor(1, 1, 1)
@@ -204,7 +256,7 @@ function spawnEntity(className, params)
       self.y = self.y + self.vy * dt
     end,
     draw = function(self)
-      love.graphics.setColor(74 / 255, 74 / 255, 74 / 255)
+      love.graphics.setColor(COLORS.DARK_GREY)
       love.graphics.circle('fill', self.x, self.y, self.radius)
     end,
     keypressed = function(self, key) end,
