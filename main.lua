@@ -1,7 +1,7 @@
 -- Constants
 local COLORS = {
   BLACK = { 11 / 255, 11 / 255, 4 / 255 },
-  DARK_GREY = { 80 / 255, 79 / 255, 68 / 255 },
+  DARK_GREY = { 66 / 255, 64 / 255, 55 / 255 },
   PURPLE = { 157 / 255, 52 / 255, 204 / 255 },
   RED = { 253 / 255, 42 / 255, 4 / 255 },
   PURE_WHITE = { 1, 1, 1 }
@@ -142,6 +142,8 @@ local ENTITY_CLASSES = {
     pupilDist = 1,
     pupilAngle = 0,
     timeUntilUpdatePupil = 0.00,
+    blinkFrames = 0,
+    timeUntilBlink = 0.00,
     init = function(self)
       self.radius = 5 + 2 * self.size
     end,
@@ -149,18 +151,24 @@ local ENTITY_CLASSES = {
       self.stateTime = self.stateTime + dt
       self.timeUntilUpdateEyeWhite = self.timeUntilUpdateEyeWhite - dt
       self.timeUntilUpdatePupil = self.timeUntilUpdatePupil - dt
-      if self.stareTarget then
+      self.blinkFrames = self.blinkFrames - 1
+      self.timeUntilBlink = self.timeUntilBlink - dt
+      if self.timeUntilBlink <= 0.00 then
+        self.timeUntilBlink = 5.00 + 15.00 * math.random()
+        self.blinkFrames = 10
+      end
+      if self.stareTarget and self.blinkFrames <= 0 then
         local dx = self.stareTarget.x - self.x
         local dy = self.stareTarget.y - self.y
         local dist = math.sqrt(dx * dx + dy * dy)
         local angle = math.atan2(dy, dx)
-        if self.timeUntilUpdatePupil < 0 then
+        if self.timeUntilUpdatePupil <= 0 then
           self.timeUntilUpdatePupil = 0.05 + 0.20 * math.random()
           self.pupilDist = 0.3 + math.min(dist / 100, 0.7)
           self.pupilAngle = angle
         end
-        if self.timeUntilUpdateEyeWhite < 0 then
-          self.timeUntilUpdateEyeWhite = 0.10 + 0.30 * math.random()
+        if self.timeUntilUpdateEyeWhite <= 0 then
+          self.timeUntilUpdateEyeWhite = 0.20 + 0.30 * math.random()
           self.eyeWhiteDist = 0.6 + math.min(dist / 200, 0.4)
           self.eyeWhiteAngle = angle
         end
@@ -176,7 +184,15 @@ local ENTITY_CLASSES = {
       -- Draw ball
       drawSprite(1 + 30 * (4 - self.size), 1, 29, 29, self.x - 14.5, self.y - 14.5)
       -- Draw white of eyes
-      drawSprite(1 + 20 * (4 - self.size), 31, 19, 20, self.x + eyeWhiteX - 9.5, self.y + eyeWhiteY - 10)
+      local frame = 1
+      if self.blinkFrames > 0 then
+        if self.blinkFrames <= 5 then
+          frame = self.blinkFrames
+        else
+          frame = 11 - self.blinkFrames
+        end
+      end
+      drawSprite(1 + 20 * (4 - self.size), 31 + 21 * (frame - 1), 19, 20, self.x + eyeWhiteX - 9.5, self.y + eyeWhiteY - 10)
       -- Draw pupil
       love.graphics.setColor(COLORS.DARK_GREY)
       love.graphics.rectangle('fill', self.x + eyeWhiteX + pupilX - pupilSize / 2, self.y + eyeWhiteY + pupilY - pupilSize / 2, pupilSize, pupilSize)
