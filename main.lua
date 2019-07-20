@@ -181,12 +181,12 @@ local ENTITY_CLASSES = {
         local angle = math.atan2(dy, dx)
         if self.timeUntilUpdatePupil <= 0 then
           self.timeUntilUpdatePupil = 0.05 + 0.20 * math.random()
-          self.pupilDist = 0.3 + math.min(dist / 100, 0.7)
-          self.pupilAngle = angle
+          self.pupilDist = 0.3 + math.min(dist / 100, 0.65) + 0.05 * math.random()
+          self.pupilAngle = angle + 0.2 * math.random() - 0.1
         end
         if self.timeUntilUpdateEyeWhite <= 0 then
           self.timeUntilUpdateEyeWhite = 0.20 + 0.30 * math.random()
-          self.eyeWhiteDist = 0.6 + math.min(dist / 200, 0.4)
+          self.eyeWhiteDist = 0.55 + math.min(dist / 200, 0.45)
           self.eyeWhiteAngle = angle
         end
       end
