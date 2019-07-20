@@ -161,13 +161,26 @@ local ENTITY_CLASSES = {
     timeUntilUpdatePupil = 0.00,
     blinkFrames = 0,
     timeUntilBlink = 0.00,
+    staringPlayer = nil,
+    timeStaredAt = 0.00,
     init = function(self)
       self.radius = 5 + 2 * self.size
     end,
     update = function(self, dt)
+      self.staringPlayer = nil
+      for _, player in ipairs(players) do
+        if player.stareTarget == self then
+          self.staringPlayer = player
+        end
+      end
+      if self.staringPlayer then
+        self.timeStaredAt = self.timeStaredAt + dt
+      else
+        self.timeStaredAt = 0.94 * self.timeStaredAt
+      end
       self.stateTime = self.stateTime + dt
       self.timeUntilUpdateEyeWhite = self.timeUntilUpdateEyeWhite - dt
-      self.timeUntilUpdatePupil = self.timeUntilUpdatePupil - dt
+      self.timeUntilUpdatePupil = self.timeUntilUpdatePupil - (self.staringPlayer and 5 or 1) * dt
       self.blinkFrames = self.blinkFrames - 1
       self.timeUntilBlink = self.timeUntilBlink - dt
       if self.timeUntilBlink <= 0.00 then
@@ -175,14 +188,15 @@ local ENTITY_CLASSES = {
         self.blinkFrames = 10
       end
       if self.stareTarget and self.blinkFrames <= 0 then
+        local pupilJitter = self.staringPlayer and 0.8 or 0.2
         local dx = self.stareTarget.x - self.x
         local dy = self.stareTarget.y - self.y
         local dist = math.sqrt(dx * dx + dy * dy)
         local angle = math.atan2(dy, dx)
         if self.timeUntilUpdatePupil <= 0 then
           self.timeUntilUpdatePupil = 0.05 + 0.20 * math.random()
-          self.pupilDist = 0.3 + math.min(dist / 100, 0.65) + 0.05 * math.random()
-          self.pupilAngle = angle + 0.2 * math.random() - 0.1
+          self.pupilDist = 0.3 + math.min(dist / 100, 0.7 - pupilJitter / 5) + pupilJitter / 5 * math.random()
+          self.pupilAngle = angle + pupilJitter * math.random() - pupilJitter / 2
         end
         if self.timeUntilUpdateEyeWhite <= 0 then
           self.timeUntilUpdateEyeWhite = 0.20 + 0.30 * math.random()
@@ -192,14 +206,21 @@ local ENTITY_CLASSES = {
       end
     end,
     draw = function(self)
-      local eyeWhiteX = self.eyeWhiteDist * 0.25 * self.radius * math.cos(self.eyeWhiteAngle)
-      local eyeWhiteY = self.eyeWhiteDist * 0.35 * self.radius * math.sin(self.eyeWhiteAngle)
-      local pupilX = self.pupilDist * 0.35 * self.radius * math.cos(self.pupilAngle)
-      local pupilY = self.pupilDist * 0.25 * self.radius * math.sin(self.pupilAngle)
+      local shake = 0
+      if self.staringPlayer then
+        local shakeAmount = 0.2 + self.timeStaredAt
+        shake = shakeAmount * (2 * math.floor((self.framesAlive % 4) / 2) - 1)
+      end
+      local x = self.x + shake
+      local y = self.y
+      local eyeWhiteX = x + self.eyeWhiteDist * 0.25 * self.radius * math.cos(self.eyeWhiteAngle)
+      local eyeWhiteY = y + self.eyeWhiteDist * 0.35 * self.radius * math.sin(self.eyeWhiteAngle)
+      local pupilX = eyeWhiteX + self.pupilDist * 0.35 * self.radius * math.cos(self.pupilAngle)
+      local pupilY = eyeWhiteY + self.pupilDist * 0.25 * self.radius * math.sin(self.pupilAngle)
       local pupilSize = self.size > 2 and 3 or 2
       love.graphics.setColor(COLORS.PURE_WHITE)
       -- Draw ball
-      drawSprite(1 + 30 * (4 - self.size), 1, 29, 29, self.x - 14.5, self.y - 14.5)
+      drawSprite(1 + 30 * (4 - self.size), 1, 29, 29, x - 14.5, y - 14.5)
       -- Draw white of eyes
       local frame = 1
       if self.blinkFrames > 0 then
@@ -209,10 +230,10 @@ local ENTITY_CLASSES = {
           frame = 11 - self.blinkFrames
         end
       end
-      drawSprite(1 + 20 * (4 - self.size), 31 + 21 * (frame - 1), 19, 20, self.x + eyeWhiteX - 9.5, self.y + eyeWhiteY - 10)
+      drawSprite(1 + 20 * (4 - self.size), 31 + 21 * (frame - 1), 19, 20, eyeWhiteX - 9.5, eyeWhiteY - 10)
       -- Draw pupil
       love.graphics.setColor(COLORS.DARK_GREY)
-      love.graphics.rectangle('fill', self.x + eyeWhiteX + pupilX - pupilSize / 2, self.y + eyeWhiteY + pupilY - pupilSize / 2, pupilSize, pupilSize)
+      love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
     end,
     startStaring = function(self, target)
       self:setState('staring')
@@ -249,6 +270,8 @@ end
 function love.update(dt)
   -- Update entities
   for _, entity in ipairs(entities) do
+    entity.framesAlive = entity.framesAlive + 1
+    entity.timeAlive = entity.timeAlive + dt
     entity:update(dt)
   end
 end
@@ -281,6 +304,8 @@ function spawnEntity(className, params)
   -- Create a default entity
   local entity = {
     type = className,
+    framesAlive = 0,
+    timeAlive = 0.00,
     x = 0,
     y = 0,
     radius = 10,
