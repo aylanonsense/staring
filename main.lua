@@ -1,4 +1,6 @@
 -- Constants
+local GAME_WIDTH = 225
+local GAME_HEIGHT = 225
 local COLORS = {
   BLACK = { 11 / 255, 11 / 255, 4 / 255 },
   DARK_GREY = { 66 / 255, 64 / 255, 55 / 255 },
@@ -12,6 +14,7 @@ local spriteSheet
 
 -- Game variables
 local entities = {}
+local entitiesToBeAdded = {}
 local players = {}
 local eyebaddies = {}
 
@@ -204,6 +207,39 @@ local ENTITY_CLASSES = {
           self.eyeWhiteAngle = angle
         end
       end
+      if self.timeStaredAt > 0.85 and self.staringPlayer and self.isAlive then
+        self:die()
+        -- Spawn some particles
+        local dx = self.x - self.staringPlayer.x
+        local dy = self.y - self.staringPlayer.y
+        local dist = math.sqrt(dx * dx + dy * dy)
+        -- local angle = math.atan2(dy, dx)
+        local numParticles = math.floor(20 * (self.size + 0.5))
+        local startAngle = math.pi * math.random()
+        for i = 1, numParticles do
+          local size = math.random(1, 4)
+          local speed = math.random(55, 75) * (5 - size) * (1 + self.size)
+          local spawnDist = 0.5 + math.random() * (self.radius - 0.5)
+          local spawnAngle = startAngle + 2 * math.pi * (i / numParticles) + 0.5 * math.random()
+          local spawnCos = math.cos(spawnAngle)
+          local spawnSin = math.sin(spawnAngle)
+          -- local speedStare
+          local speedOutwards = speed * spawnDist / self.radius
+          local speedStare = speed
+          if i % 10 == 0 then
+            speedStare = speedStare / 2
+          else
+            speedOutwards = speedOutwards / 2
+          end
+          spawnEntity('eyepoof', {
+            x = self.x + spawnDist * spawnCos,
+            y = self.y + spawnDist * spawnSin,
+            size = size,
+            vx = speedOutwards * spawnCos + speedStare * dx / dist,
+            vy = speedOutwards * spawnSin + speedStare * dy / dist
+          })
+        end
+      end
     end,
     draw = function(self)
       local shake = 0
@@ -243,6 +279,46 @@ local ENTITY_CLASSES = {
       self.state = state
       self.stateTime = 0.00
     end
+  },
+  eyepoof = {
+    radius = 0,
+    size = 1,
+    timeToShrink = 0.00,
+    init = function(self)
+      self.radius = self.size
+      self.timeToShrink = 0.10 + 0.10 * math.random()
+    end,
+    update = function(self, dt)
+      self.timeToShrink = self.timeToShrink - dt
+      if self.timeToShrink <= 0.00 then
+        self.timeToShrink = 0.10 + 0.10 * math.random()
+        if self.size > 1 then
+          self.size = self.size - 1
+        else
+          self:die()
+        end
+      end
+      self.vx = self.vx * 0.91
+      self.vy = self.vy * 0.91
+      self:applyVelocity(dt)
+      if self.x < self.radius then
+        self.x = self.radius
+        self.vx = math.abs(self.vx)
+      elseif self.x > GAME_WIDTH - self.radius then
+        self.x = GAME_WIDTH - self.radius
+        self.vx = -math.abs(self.vx)
+      end
+      if self.y < self.radius then
+        self.y = self.radius
+        self.vy = math.abs(self.vy)
+      elseif self.y > GAME_HEIGHT - self.radius then
+        self.y = GAME_HEIGHT - self.radius
+        self.vy = -math.abs(self.vy)
+      end
+    end,
+    draw = function(self)
+      drawSprite(121 + 11 * (4 - self.size), 1, 10, 10, self.x - 5, self.y - 5)
+    end
   }
 }
 
@@ -252,10 +328,10 @@ function love.load()
   -- Load assets
   spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
   -- Spawn entities
-  spawnEntity('player', { x = 30, y = 30 })
+  local player = spawnEntity('player', { x = 30, y = 30 })
   for i = 1, 30 do
-    spawnEntity('eyebaddie', { x = math.random(20, 205), y = math.random(20, 205), size = math.random(1, 4) })
-    eyebaddies[i]:startStaring(players[1])
+    local eyebaddie = spawnEntity('eyebaddie', { x = math.random(20, 205), y = math.random(20, 205), size = math.random(1, 4) })
+    eyebaddie:startStaring(player)
   end
   -- Move the eyebaddies so they aren't overlapping
   for iteration = 1, 3 do
@@ -265,6 +341,7 @@ function love.load()
       end
     end
   end
+  addEntitiesToGame()
 end
 
 function love.update(dt)
@@ -274,6 +351,8 @@ function love.update(dt)
     entity.timeAlive = entity.timeAlive + dt
     entity:update(dt)
   end
+  addEntitiesToGame()
+  removeEntitiesFromGame()
 end
 
 function love.draw()
@@ -304,6 +383,7 @@ function spawnEntity(className, params)
   -- Create a default entity
   local entity = {
     type = className,
+    isAlive = true,
     framesAlive = 0,
     timeAlive = 0.00,
     x = 0,
@@ -347,6 +427,9 @@ function spawnEntity(className, params)
           end
         end
       end
+    end,
+    die = function(self)
+      self.isAlive = false
     end
   }
   -- Add properties from the class
@@ -357,10 +440,25 @@ function spawnEntity(className, params)
   for k, v in pairs(params) do
     entity[k] = v
   end
-  -- Add it to the game, initialize it, and return it
-  entity:addToGame()
+  -- Add it to the list of entities to be added, initialize it, and return it
+  table.insert(entitiesToBeAdded, entity)
   entity:init()
   return entity
+end
+
+function addEntitiesToGame()
+  for _, entity in ipairs(entitiesToBeAdded) do
+    entity:addToGame()
+  end
+  entitiesToBeAdded = {}
+end
+
+function removeEntitiesFromGame()
+  for i = #entities, 1, -1 do
+    if not entities[i].isAlive then
+      entities[i]:removeFromGame()
+    end
+  end
 end
 
 -- Draw a sprite from the sprite sheet to the screen
