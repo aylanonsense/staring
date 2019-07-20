@@ -35,7 +35,7 @@ local ENTITY_CLASSES = {
       -- Transition states
       if self.state == 'dashing' and self.stateTime > 0.30 then
         self:setState('default')
-      elseif self.state == 'staring' and self.stateTime > 0.20 and not love.keyboard.isDown('space') then 
+      elseif self.state == 'staring' and self.stateTime > 0.20 and not self:shouldStillBeStaring() then
         self:setState('default')
       end
       self:updateFacing()
@@ -45,7 +45,7 @@ local ENTITY_CLASSES = {
         self.vy = self.vy * 0.85
       -- Control velocity with inputs
       elseif self.state == 'default' then
-        local dirX, dirY = self:getInputDirection()
+        local dirX, dirY = self:getMoveDirection()
         self.vx = 0.7 * self.vx + 0.3 * dirX * 65
         self.vy = 0.7 * self.vy + 0.3 * dirY * 65
       end
@@ -82,14 +82,17 @@ local ENTITY_CLASSES = {
         drawPixelatedLine(self.x, self.y, self.stareX, self.stareY)
       end
     end,
-    keypressed = function(self, key)
-      if key == 'space' then
+    mousepressed = function(self, x, y, button)
+      if button == 1 then
         self:startStaring()
-      elseif key == 'lshift' then
+      end
+    end,
+    keypressed = function(self, key)
+      if key == 'lshift' then
         self:dash()
       end
     end,
-    getInputDirection = function(self)
+    getMoveDirection = function(self)
       local isPressingUp = love.keyboard.isDown('up') or love.keyboard.isDown('w')
       local isPressingLeft = love.keyboard.isDown('left') or love.keyboard.isDown('a')
       local isPressingDown = love.keyboard.isDown('down') or love.keyboard.isDown('s')
@@ -102,8 +105,19 @@ local ENTITY_CLASSES = {
       end
       return dirX, dirY
     end,
+    getAimDirection = function(self)
+      local mouseX, mouseY = love.mouse.getPosition()
+      if mouseX and mouseY then
+        local dx = mouseX - self.x
+        local dy = mouseY - self.y
+        local dist = math.sqrt(dx * dx + dy * dy)
+        return dx / dist, dy / dist
+      else
+        return 0, 0
+      end
+    end,
     updateFacing = function(self)
-      local dirX, dirY = self:getInputDirection()
+      local dirX, dirY = self:getAimDirection()
       if dirX ~= 0 or dirY ~= 0 then
         self.facingX = dirX
         self.facingY = dirY
@@ -111,7 +125,7 @@ local ENTITY_CLASSES = {
     end,
     dash = function(self)
       if (self.state == 'default' or self.state == 'staring') and self.timeSinceLastDash > 0.40 then
-        local dirX, dirY = self:getInputDirection()
+        local dirX, dirY = self:getMoveDirection()
         if dirX ~= 0 or dirY ~= 0 then
           self.vx = 400 * dirX
           self.vy = 400 * dirY
@@ -122,6 +136,9 @@ local ENTITY_CLASSES = {
     end,
     startStaring = function(self)
       self:setState('staring')
+    end,
+    shouldStillBeStaring = function(self)
+      return love.mouse.isDown(1)
     end,
     setState = function(self, state)
       self.state = state
@@ -246,6 +263,13 @@ function love.draw()
   end
 end
 
+function love.mousepressed(...)
+  for _, entity in ipairs(entities) do
+    entity:mousepressed(...)
+  end
+end
+
+
 function love.keypressed(...)
   for _, entity in ipairs(entities) do
     entity:keypressed(...)
@@ -275,6 +299,7 @@ function spawnEntity(className, params)
       love.graphics.setColor(COLORS.DARK_GREY)
       love.graphics.circle('fill', self.x, self.y, self.radius)
     end,
+    mousepressed = function(self, x, y) end,
     keypressed = function(self, key) end,
     addToGame = function(self)
       table.insert(entities, self)
