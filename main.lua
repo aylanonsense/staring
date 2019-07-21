@@ -13,6 +13,9 @@ local COLORS = {
 local spriteSheet
 
 -- Game variables
+local lasersToShoot
+local timeUntilLaserVolley
+local timeUntilNextLaser
 local entities = {}
 local entitiesToBeAdded = {}
 local players = {}
@@ -158,9 +161,13 @@ local ENTITY_CLASSES = {
     stareTarget = nil,
     eyeWhiteDist = 1,
     eyeWhiteAngle = 0,
+    eyeWhiteX = 0,
+    eyeWhiteY = 0,
     timeUntilUpdateEyeWhite = 0.00,
     pupilDist = 1,
     pupilAngle = 0,
+    pupilX = 0,
+    pupilY = 0,
     timeUntilUpdatePupil = 0.00,
     blinkFrames = 0,
     timeUntilBlink = 0.00,
@@ -191,7 +198,7 @@ local ENTITY_CLASSES = {
         self.blinkFrames = 10
       end
       if self.stareTarget and self.blinkFrames <= 0 then
-        local pupilJitter = self.staringPlayer and 0.8 or 0.2
+        local pupilJitter = self.staringPlayer and 2.0 or 0.2
         local dx = self.stareTarget.x - self.x
         local dy = self.stareTarget.y - self.y
         local dist = math.sqrt(dx * dx + dy * dy)
@@ -207,13 +214,30 @@ local ENTITY_CLASSES = {
           self.eyeWhiteAngle = angle
         end
       end
-      if self.timeStaredAt > 0.85 and self.staringPlayer and self.isAlive then
+      self.eyeWhiteX = self.x + self.eyeWhiteDist * 0.25 * self.radius * math.cos(self.eyeWhiteAngle)
+      self.eyeWhiteY = self.y + self.eyeWhiteDist * 0.35 * self.radius * math.sin(self.eyeWhiteAngle)
+      self.pupilX = self.eyeWhiteX + self.pupilDist * 0.35 * self.radius * math.cos(self.pupilAngle)
+      self.pupilY = self.eyeWhiteY + self.pupilDist * 0.25 * self.radius * math.sin(self.pupilAngle)
+      if self.state == 'charging-laser' then
+        if self.framesAlive % 3 == 0 and self.stateTime < 1.25 then
+          local angle = self.eyeWhiteAngle + 1.80 * math.random() - 0.90
+          local cosAngle = math.cos(angle)
+          local sinAngle = math.sin(angle)
+          spawnEntity('chargeyline', {
+            x = self.x + (10 + 5 * self.size) * cosAngle,
+            y = self.y + (10 + 5 * self.size) * sinAngle,
+            targetX = self.pupilX,
+            targetY = self.pupilY,
+            duration = (0.12 + 0.08 * self.size) * (1.00 - 0.75 * math.min(1.00, self.stateTime / 1.25))
+          })
+        end
+      end
+      if self.timeStaredAt > 0.30 + 0.20 * self.size and self.staringPlayer and self.isAlive then
         self:die()
         -- Spawn some particles
         local dx = self.x - self.staringPlayer.x
         local dy = self.y - self.staringPlayer.y
         local dist = math.sqrt(dx * dx + dy * dy)
-        -- local angle = math.atan2(dy, dx)
         local numParticles = math.floor(20 * (self.size + 0.5))
         local startAngle = math.pi * math.random()
         for i = 1, numParticles do
@@ -249,31 +273,38 @@ local ENTITY_CLASSES = {
       end
       local x = self.x + shake
       local y = self.y
-      local eyeWhiteX = x + self.eyeWhiteDist * 0.25 * self.radius * math.cos(self.eyeWhiteAngle)
-      local eyeWhiteY = y + self.eyeWhiteDist * 0.35 * self.radius * math.sin(self.eyeWhiteAngle)
-      local pupilX = eyeWhiteX + self.pupilDist * 0.35 * self.radius * math.cos(self.pupilAngle)
-      local pupilY = eyeWhiteY + self.pupilDist * 0.25 * self.radius * math.sin(self.pupilAngle)
       local pupilSize = self.size > 2 and 3 or 2
       love.graphics.setColor(COLORS.PURE_WHITE)
       -- Draw ball
       drawSprite(1 + 30 * (4 - self.size), 1, 29, 29, x - 14.5, y - 14.5)
       -- Draw white of eyes
-      local frame = 1
-      if self.blinkFrames > 0 then
+      local frame
+      if self.state == 'charging-laser' then
+        frame = 5
+      elseif self.blinkFrames > 0 then
         if self.blinkFrames <= 5 then
           frame = self.blinkFrames
         else
           frame = 11 - self.blinkFrames
         end
+      else
+        frame = 1
       end
-      drawSprite(1 + 20 * (4 - self.size), 31 + 21 * (frame - 1), 19, 20, eyeWhiteX - 9.5, eyeWhiteY - 10)
+      drawSprite(1 + 20 * (4 - self.size), 31 + 21 * (frame - 1), 19, 20, self.eyeWhiteX + shake - 9.5, self.eyeWhiteY - 10)
       -- Draw pupil
-      love.graphics.setColor(COLORS.DARK_GREY)
-      love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
+      love.graphics.setColor(self.state == 'charging-laser' and COLORS.RED or COLORS.DARK_GREY)
+      love.graphics.rectangle('fill', self.pupilX + shake - pupilSize / 2, self.pupilY - pupilSize / 2, pupilSize, pupilSize)
+      -- Draw laser
+      if self.state == 'charging-laser' and self.stareTarget then
+        drawPixelatedLine(self.pupilX, self.pupilY, self.stareTarget.x, self.stareTarget.y, 1, 5, 3)
+      end
     end,
     startStaring = function(self, target)
       self:setState('staring')
       self.stareTarget = target
+    end,
+    shootLaser = function(self)
+      self:setState('charging-laser')
     end,
     setState = function(self, state)
       self.state = state
@@ -319,20 +350,54 @@ local ENTITY_CLASSES = {
     draw = function(self)
       drawSprite(121 + 11 * (4 - self.size), 1, 10, 10, self.x - 5, self.y - 5)
     end
+  },
+  chargeyline = {
+    color = COLORS.RED,
+    targetX = nil,
+    targetY = nil,
+    init = function(self)
+      self.prevX = self.x
+      self.prevY = self.y
+      self.startX = self.x
+      self.startY = self.y
+    end,
+    update = function(self, dt)
+      local t = math.min(math.max(0.00, self.timeAlive / self.duration), 1.00)
+      local p = math.pow(t, 2)
+      self.prevX = self.x
+      self.prevY = self.y
+      self.x = self.targetX * p + self.startX * (1 - p)
+      self.y = self.targetY * p + self.startY * (1 - p)
+      if self.timeAlive >= self.duration then
+        self:die()
+      end
+    end,
+    draw = function(self)
+      love.graphics.setColor(self.color)
+      drawPixelatedLine(self.prevX, self.prevY, self.x, self.y)
+    end
   }
 }
 
 function love.load()
+  lasersToShoot = 0
+  timeUntilLaserVolley = 1.00
+  timeUntilNextLaser = 0.00
   -- Set default filter to nearest to allow crisp pixel art
   love.graphics.setDefaultFilter('nearest', 'nearest')
   -- Load assets
   spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
   -- Spawn entities
   local player = spawnEntity('player', { x = 30, y = 30 })
-  for i = 1, 30 do
-    local eyebaddie = spawnEntity('eyebaddie', { x = math.random(20, 205), y = math.random(20, 205), size = math.random(1, 4) })
+  for i = 1, 1 do
+    local eyebaddie = spawnEntity('eyebaddie', {
+      x = 112.5, -- math.random(20, 205),
+      y = 112.5, -- math.random(20, 205),
+      size = math.random(1, 4)
+    })
     eyebaddie:startStaring(player)
   end
+  addEntitiesToGame()
   -- Move the eyebaddies so they aren't overlapping
   for iteration = 1, 3 do
     for i = 1, #eyebaddies do
@@ -341,7 +406,6 @@ function love.load()
       end
     end
   end
-  addEntitiesToGame()
 end
 
 function love.update(dt)
@@ -353,6 +417,21 @@ function love.update(dt)
   end
   addEntitiesToGame()
   removeEntitiesFromGame()
+  timeUntilLaserVolley = timeUntilLaserVolley - dt
+  if timeUntilLaserVolley <= 0.00 then
+    lasersToShoot = 1
+    timeUntilLaserVolley = 8.00
+    timeUntilNextLaser = 0.00
+  end
+  if lasersToShoot > 0 then
+    timeUntilNextLaser = timeUntilNextLaser - dt
+    if timeUntilNextLaser <= 0.00 then
+      lasersToShoot = lasersToShoot - 1
+      timeUntilNextLaser = 0.50
+      local eyebaddie = eyebaddies[1]
+      eyebaddie:shootLaser()
+    end
+  end
 end
 
 function love.draw()
@@ -508,19 +587,30 @@ function handleCollision(entity1, entity2)
 end
 
 -- Draws a line by drawing little pixely squares
-function drawPixelatedLine(x1, y1, x2, y2)
+function drawPixelatedLine(x1, y1, x2, y2, thickness, gaps, dashes)
+  thickness = thickness or 1
+  gaps = gaps or 0
+  dashes = dashes or (gaps == 0 and 1 or gaps)
   local dx, dy = math.abs(x2 - x1), math.abs(y2 - y1)
   if dx > dy then
-    local minX, maxX = math.floor(math.min(x1, x2)), math.ceil(math.max(x1, x2))
+    local i = x1 < x2 and 0 or dx
+    local minX, maxX = math.floor(math.min(x1, x2) + 0.5), math.floor(math.max(x1, x2) + 0.5)
     for x = minX, maxX do
-      local y = math.floor(y1 + (y2 - y1) * (x - x1) / (x2 - x1) + 0.5)
-      love.graphics.rectangle('fill', x, y, 1, 1)
+      if i % (gaps + dashes) < dashes then
+        local y = math.floor(y1 + (y2 - y1) * (x - x1) /(x1 == x2 and 1 or x2 - x1) + 0.5)
+        love.graphics.rectangle('fill', x - thickness / 2, y - thickness / 2, thickness, thickness)
+      end
+      i = i + (x1 < x2 and 1 or -1)
     end
   else
-    local minY, maxY = math.floor(math.min(y1, y2)), math.ceil(math.max(y1, y2))
+    local i = y1 < y2 and 0 or dy
+    local minY, maxY = math.floor(math.min(y1, y2) + 0.5), math.floor(math.max(y1, y2) + 0.5)
     for y = minY, maxY do
-      local x = math.floor(x1 + (x2 - x1) * (y - y1) / (y2 - y1) + 0.5)
-      love.graphics.rectangle('fill', x, y, 1, 1)
+      if i % (gaps + dashes) < dashes then
+        local x = math.floor(x1 + (x2 - x1) * (y - y1) / (y1 == y2 and 1 or y2 - y1) + 0.5)
+        love.graphics.rectangle('fill', x - thickness / 2, y - thickness / 2, thickness, thickness)
+      end
+      i = i + (y1 < y2 and 1 or -1)
     end
   end
 end
