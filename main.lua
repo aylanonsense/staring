@@ -349,15 +349,25 @@ local ENTITY_CLASSES = {
           })
         end
       end
+      if self.state == 'shooting-laser' and self.stateTime > 0.75 then
+        self:setState('default')
+      end
     end,
     draw = function(self)
-      local shake = 0
-      if self.staringPlayer then
-        local shakeAmount = 0.2 + self.timeStaredAt
-        shake = shakeAmount * (2 * math.floor((self.framesAlive % 4) / 2) - 1)
+      local offsetX = 0
+      local offsetY = 0
+      if self.state == 'charging-laser' and self.stateTime > LASER_CHARGE_TIME then
+        offsetX = offsetX - math.cos(self.pupilAngle)
+        offsetY = offsetY - math.sin(self.pupilAngle)
+      elseif self.state == 'shooting-laser' then
+        offsetX = offsetX + 2 * math.cos(self.pupilAngle)
+        offsetY = offsetY + 2 * math.sin(self.pupilAngle)
       end
-      local x = self.x + shake
-      local y = self.y
+      if self.staringPlayer then
+        offsetX = offsetX + (0.2 + self.timeStaredAt) * (2 * math.floor((self.framesAlive % 4) / 2) - 1)
+      end
+      local x = self.x + offsetX
+      local y = self.y + offsetY
       local pupilSize = self.size > 2 and 3 or 2
       love.graphics.setColor(COLORS.PURE_WHITE)
       -- Draw ball
@@ -375,10 +385,10 @@ local ENTITY_CLASSES = {
       else
         frame = 1
       end
-      drawSprite(1 + 20 * (4 - self.size), 31 + 21 * (frame - 1), 19, 20, self.eyeWhiteX + shake - 9.5, self.eyeWhiteY - 10)
+      drawSprite(1 + 20 * (4 - self.size), 31 + 21 * (frame - 1), 19, 20, self.eyeWhiteX + offsetX - 9.5, self.eyeWhiteY + offsetY - 10)
       -- Draw pupil
       love.graphics.setColor((self.state == 'charging-laser' or self.state == 'shooting-laser') and COLORS.RED or COLORS.DARK_GREY)
-      love.graphics.rectangle('fill', self.pupilX + shake - pupilSize / 2, self.pupilY - pupilSize / 2, pupilSize, pupilSize)
+      love.graphics.rectangle('fill', self.pupilX + offsetX - pupilSize / 2, self.pupilY + offsetY - pupilSize / 2, pupilSize, pupilSize)
       -- Draw laser
       if self.state == 'charging-laser' and self.stareX and self.stareY then
         local gap = math.max(math.ceil(7 - 4 * self.stateTime / LASER_CHARGE_TIME), 4)
