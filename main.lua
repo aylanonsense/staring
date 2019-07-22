@@ -6,8 +6,12 @@ local COLORS = {
   DARK_GREY = { 66 / 255, 64 / 255, 55 / 255 },
   PURPLE = { 157 / 255, 52 / 255, 204 / 255 },
   RED = { 253 / 255, 42 / 255, 4 / 255 },
+  WHITE = { 241 / 255, 241 / 255, 236 / 255 },
   PURE_WHITE = { 1, 1, 1 }
 }
+local LASER_CHARGE_TIME = 2.00
+local LASER_CHARGE_PAUSE_TIME = 0.20
+local PLAYER_RUN_SPEED = 50
 
 -- Assets
 local spriteSheet
@@ -52,8 +56,8 @@ local ENTITY_CLASSES = {
       -- Control velocity with inputs
       elseif self.state == 'default' then
         local dirX, dirY = self:getMoveDirection()
-        self.vx = 0.7 * self.vx + 0.3 * dirX * 65
-        self.vy = 0.7 * self.vy + 0.3 * dirY * 65
+        self.vx = 0.7 * self.vx + 0.3 * dirX * PLAYER_RUN_SPEED
+        self.vy = 0.7 * self.vy + 0.3 * dirY * PLAYER_RUN_SPEED
       end
       -- Apply velocity
       self:applyVelocity(dt)
@@ -84,7 +88,7 @@ local ENTITY_CLASSES = {
       love.graphics.setColor(COLORS.PURPLE)
       love.graphics.circle('fill', self.x, self.y, self.radius)
       if self.stareX and self.stareY then
-        love.graphics.setColor(COLORS.RED)
+        love.graphics.setColor(COLORS.PURPLE)
         drawPixelatedLine(self.x, self.y, self.stareX, self.stareY)
       end
     end,
@@ -201,13 +205,21 @@ local ENTITY_CLASSES = {
         self.blinkFrames = 10
       end
       if self.intendedStareTarget and self.blinkFrames <= 0 then -- TODO blink while laser?
+        local changeMult = 1.00
+        if self.state == 'charging-laser' then
+          changeMult = math.min(math.max(0.00, 8 * (LASER_CHARGE_TIME - self.stateTime)), 1.00)
+        elseif self.state == 'shooting-laser' then
+          changeMult = 0.00
+        end
         local dx = self.intendedStareTarget.x - self.x
         local dy = self.intendedStareTarget.y - self.y
         local dist = math.sqrt(dx * dx + dy * dy)
         local angle = math.atan2(dy, dx)
-        if self.state == 'charging-laser' then
+        if self.state == 'charging-laser' or self.state == 'shooting-laser' then
           self.timeUntilUpdatePupil = 0.00
-          self.pupilDist = 0.3 + math.min(dist / 100, 0.7)
+          if changeMult > 0.00 then
+            self.pupilDist = 0.3 + math.min(dist / 100, 0.7)
+          end
           local angleDiff
           if angle - self.pupilAngle > math.pi then
             angleDiff = angle - self.pupilAngle - 2 * math.pi
@@ -216,7 +228,7 @@ local ENTITY_CLASSES = {
           else
             angleDiff = angle - self.pupilAngle
           end
-          local change = math.min(math.max(-0.05, angleDiff * 0.14), 0.05)
+          local change = math.min(math.max(-0.05, angleDiff * 0.14), 0.05) * changeMult
           self.pupilAngle = (self.pupilAngle + change) % (2 * math.pi)
         elseif self.timeUntilUpdatePupil <= 0 then
           local pupilJitter = self.staringPlayer and 2.0 or 0.2
@@ -226,8 +238,10 @@ local ENTITY_CLASSES = {
         end
         if self.timeUntilUpdateEyeWhite <= 0 then
           self.timeUntilUpdateEyeWhite = 0.20 + 0.30 * math.random()
-          self.eyeWhiteDist = 0.55 + math.min(dist / 200, 0.45)
-          self.eyeWhiteAngle = angle
+          if changeMult > 0.00 then
+            self.eyeWhiteDist = 0.55 + math.min(dist / 200, 0.45)
+            self.eyeWhiteAngle = angle
+          end
         end
       end
       self.eyeWhiteX = self.x + self.eyeWhiteDist * 0.25 * self.radius * math.cos(self.eyeWhiteAngle)
@@ -258,21 +272,32 @@ local ENTITY_CLASSES = {
             end
           end
         end
-        if self.framesAlive % 3 == 0 and self.stateTime < 1.25 then
-          local angle = self.eyeWhiteAngle + 1.80 * math.random() - 0.90
+        if self.framesAlive % math.floor(8 - 6 * self.stateTime / LASER_CHARGE_TIME) == 0 and self.stateTime < LASER_CHARGE_TIME then
+          local angle = self.eyeWhiteAngle + (3.50 * math.random() - 1.75) * (1.0 - 1.0 * self.stateTime / LASER_CHARGE_TIME)
           local cosAngle = math.cos(angle)
           local sinAngle = math.sin(angle)
-          spawnEntity('chargeyline', {
-            x = self.x + (10 + 5 * self.size) * cosAngle,
-            y = self.y + (10 + 5 * self.size) * sinAngle,
+          local dist = (math.random(4, 14) + 5 * self.size) * (1.0 + 0.6 * self.stateTime / LASER_CHARGE_TIME)
+          spawnEntity('lineparticle', {
+            tween = 'out',
+            x = self.x + dist * cosAngle,
+            y = self.y + dist * sinAngle,
             targetX = self.pupilX,
             targetY = self.pupilY,
-            duration = (0.12 + 0.08 * self.size) * (1.00 - 0.75 * math.min(1.00, self.stateTime / 1.25))
+            duration = (0.12 + 0.08 * self.size) * (1.00 - 0.75 * math.min(1.00, self.stateTime / LASER_CHARGE_TIME))
           })
         end
       else
         self.stareX = nil
         self.stareY = nil
+      end
+      if self.state == 'charging-laser' and self.stateTime >= LASER_CHARGE_TIME + LASER_CHARGE_PAUSE_TIME then
+        self:setState('shooting-laser')
+        spawnEntity('laser', {
+          x = self.pupilX,
+          y = self.pupilY,
+          targetX = self.stareX,
+          targetY = self.stareY
+        })
       end
       if self.timeStaredAt > 0.30 + 0.20 * self.size and self.staringPlayer and self.isAlive then
         self:die()
@@ -280,13 +305,13 @@ local ENTITY_CLASSES = {
         local dx = self.x - self.staringPlayer.x
         local dy = self.y - self.staringPlayer.y
         local dist = math.sqrt(dx * dx + dy * dy)
-        local numParticles = math.floor(20 * (self.size + 0.5))
         local startAngle = math.pi * math.random()
-        for i = 1, numParticles do
+        local numPoofParticles = math.floor(20 * (self.size + 0.5))
+        for i = 1, numPoofParticles do
           local size = math.random(1, 4)
           local speed = math.random(55, 75) * (5 - size) * (1 + self.size)
           local spawnDist = 0.5 + math.random() * (self.radius - 0.5)
-          local spawnAngle = startAngle + 2 * math.pi * (i / numParticles) + 0.5 * math.random()
+          local spawnAngle = startAngle + 2 * math.pi * (i / numPoofParticles) + 0.5 * math.random()
           local spawnCos = math.cos(spawnAngle)
           local spawnSin = math.sin(spawnAngle)
           -- local speedStare
@@ -297,12 +322,30 @@ local ENTITY_CLASSES = {
           else
             speedOutwards = speedOutwards / 2
           end
-          spawnEntity('eyepoof', {
+          spawnEntity('poofparticle', {
             x = self.x + spawnDist * spawnCos,
             y = self.y + spawnDist * spawnSin,
             size = size,
             vx = speedOutwards * spawnCos + speedStare * dx / dist,
             vy = speedOutwards * spawnSin + speedStare * dy / dist
+          })
+        end
+        local numLineParticles = 6 + 4 * self.size
+        for i = 1, numLineParticles do
+          local angle = startAngle + 4 * math.pi * ((i + (i <= numLineParticles / 2 and 0 or 0.5)) / numLineParticles)
+          local dist = 30
+          local cosAngle = math.cos(angle)
+          local sinAngle = math.sin(angle)
+          local startDist = (i <= numLineParticles / 2 and 0.2 or 0.3) * self.radius
+          local endDist = 20 + (i <= numLineParticles / 2 and 2.0 or 0.6) * self.radius
+          spawnEntity('lineparticle', {
+            tween = 'in',
+            x = self.x + startDist * cosAngle,
+            y = self.y + startDist * sinAngle,
+            targetX = self.x + endDist * cosAngle,
+            targetY = self.y + endDist * sinAngle,
+            color = COLORS.WHITE,
+            duration = 0.15 + 0.15 * math.random()
           })
         end
       end
@@ -334,11 +377,11 @@ local ENTITY_CLASSES = {
       end
       drawSprite(1 + 20 * (4 - self.size), 31 + 21 * (frame - 1), 19, 20, self.eyeWhiteX + shake - 9.5, self.eyeWhiteY - 10)
       -- Draw pupil
-      love.graphics.setColor(self.state == 'charging-laser' and COLORS.RED or COLORS.DARK_GREY)
+      love.graphics.setColor((self.state == 'charging-laser' or self.state == 'shooting-laser') and COLORS.RED or COLORS.DARK_GREY)
       love.graphics.rectangle('fill', self.pupilX + shake - pupilSize / 2, self.pupilY - pupilSize / 2, pupilSize, pupilSize)
       -- Draw laser
       if self.state == 'charging-laser' and self.stareX and self.stareY then
-        local gap = math.max(math.ceil(7 - self.stateTime), 4)
+        local gap = math.max(math.ceil(7 - 4 * self.stateTime / LASER_CHARGE_TIME), 4)
         drawPixelatedLine(self.pupilX, self.pupilY, self.stareX, self.stareY, 1, gap, 8 - gap)
       end
     end,
@@ -354,7 +397,7 @@ local ENTITY_CLASSES = {
       self.stateTime = 0.00
     end
   },
-  eyepoof = {
+  poofparticle = {
     radius = 0,
     size = 1,
     timeToShrink = 0.00,
@@ -394,10 +437,9 @@ local ENTITY_CLASSES = {
       drawSprite(121 + 11 * (4 - self.size), 1, 10, 10, self.x - 5, self.y - 5)
     end
   },
-  chargeyline = {
+  lineparticle = {
     color = COLORS.RED,
-    targetX = nil,
-    targetY = nil,
+    tween = 'out',
     init = function(self)
       self.prevX = self.x
       self.prevY = self.y
@@ -406,7 +448,14 @@ local ENTITY_CLASSES = {
     end,
     update = function(self, dt)
       local t = math.min(math.max(0.00, self.timeAlive / self.duration), 1.00)
-      local p = math.pow(t, 2)
+      local p
+      if self.tween == 'out' then
+        p = t * t
+      elseif self.tween == 'in' then
+        p = math.pow(t, 1 / 3)
+      else
+        p = t
+      end
       self.prevX = self.x
       self.prevY = self.y
       self.x = self.targetX * p + self.startX * (1 - p)
@@ -418,6 +467,44 @@ local ENTITY_CLASSES = {
     draw = function(self)
       love.graphics.setColor(self.color)
       drawPixelatedLine(self.prevX, self.prevY, self.x, self.y)
+    end
+  },
+  laser = {
+    color = COLORS.RED,
+    init = function(self)
+      self.dx = self.targetX - self.x
+      self.dy = self.targetY - self.y
+      self.laserLength = math.sqrt(self.dx * self.dx + self.dy * self.dy)
+      for i = 1, self.laserLength > 75 and 3 or 1 do
+        local distFromLaser = math.random(1, 2) * (i % 2 == 0 and -1 or 1)
+        local x = self.x + distFromLaser * self.dy / self.laserLength
+        local y = self.y - distFromLaser * self.dx / self.laserLength
+        local startDist = 15 * (i - 0.5) + math.random(-5, 5)
+        spawnEntity('lineparticle', {
+           x = x + startDist * self.dx / self.laserLength,
+           y = y + startDist * self.dy / self.laserLength,
+           tween = 'in',
+           targetX = x + (startDist + 10) * self.dx / self.laserLength,
+           targetY = y + (startDist + 10) * self.dy / self.laserLength,
+           duration = 0.10,
+           color = COLORS.RED
+        })
+      end
+    end,
+    update = function(self)
+      if self.timeAlive > 0.25 then
+        self:die()
+      end
+    end,
+    draw = function(self)
+      love.graphics.setColor(self.color)
+      local startDist = math.min(math.max(0.00, 2000 * (self.timeAlive - 0.12)), self.laserLength)
+      local endDist = math.min(2000 * self.timeAlive, self.laserLength)
+      local startX = self.x + startDist * self.dx / self.laserLength
+      local startY = self.y + startDist * self.dy / self.laserLength
+      local endX = self.x + endDist * self.dx / self.laserLength
+      local endY = self.y + endDist * self.dy / self.laserLength
+      drawPixelatedLine(startX, startY, endX, endY, 2)
     end
   }
 }
