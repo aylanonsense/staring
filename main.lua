@@ -158,7 +158,10 @@ local ENTITY_CLASSES = {
     isStationary = true,
     state = 'default',
     stateTime = 0.00,
+    intendedStareTarget = nil,
     stareTarget = nil,
+    stareX = nil,
+    stareY = nil,
     eyeWhiteDist = 1,
     eyeWhiteAngle = 0,
     eyeWhiteX = 0,
@@ -197,13 +200,26 @@ local ENTITY_CLASSES = {
         self.timeUntilBlink = 5.00 + 15.00 * math.random()
         self.blinkFrames = 10
       end
-      if self.stareTarget and self.blinkFrames <= 0 then
-        local pupilJitter = self.staringPlayer and 2.0 or 0.2
-        local dx = self.stareTarget.x - self.x
-        local dy = self.stareTarget.y - self.y
+      if self.intendedStareTarget and self.blinkFrames <= 0 then -- TODO blink while laser?
+        local dx = self.intendedStareTarget.x - self.x
+        local dy = self.intendedStareTarget.y - self.y
         local dist = math.sqrt(dx * dx + dy * dy)
         local angle = math.atan2(dy, dx)
-        if self.timeUntilUpdatePupil <= 0 then
+        if self.state == 'charging-laser' then
+          self.timeUntilUpdatePupil = 0.00
+          self.pupilDist = 0.3 + math.min(dist / 100, 0.7)
+          local angleDiff
+          if angle - self.pupilAngle > math.pi then
+            angleDiff = angle - self.pupilAngle - 2 * math.pi
+          elseif angle - self.pupilAngle < -math.pi then
+            angleDiff = angle - self.pupilAngle + 2 * math.pi
+          else
+            angleDiff = angle - self.pupilAngle
+          end
+          local change = math.min(math.max(-0.05, angleDiff * 0.14), 0.05)
+          self.pupilAngle = (self.pupilAngle + change) % (2 * math.pi)
+        elseif self.timeUntilUpdatePupil <= 0 then
+          local pupilJitter = self.staringPlayer and 2.0 or 0.2
           self.timeUntilUpdatePupil = 0.05 + 0.20 * math.random()
           self.pupilDist = 0.3 + math.min(dist / 100, 0.7 - pupilJitter / 5) + pupilJitter / 5 * math.random()
           self.pupilAngle = angle + pupilJitter * math.random() - pupilJitter / 2
@@ -219,6 +235,29 @@ local ENTITY_CLASSES = {
       self.pupilX = self.eyeWhiteX + self.pupilDist * 0.35 * self.radius * math.cos(self.pupilAngle)
       self.pupilY = self.eyeWhiteY + self.pupilDist * 0.25 * self.radius * math.sin(self.pupilAngle)
       if self.state == 'charging-laser' then
+        self.stareX = self.pupilX + 999 * math.cos(self.pupilAngle)
+        self.stareY = self.pupilY + 999 * math.sin(self.pupilAngle)
+        local stareSquareDist = nil
+        for _, player in ipairs(players) do
+          local isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.pupilX, self.pupilY, self.stareX, self.stareY, player.x, player.y, player.radius)
+          if isIntersecting and (not stareSquareDist or stareSquareDist > intersectSquareDist) then
+            self.stareX = xIntersect
+            self.stareY = yIntersect
+            self.stareTarget = player
+            stareSquareDist = intersectSquareDist
+          end
+        end
+        for _, eyebaddie in ipairs(eyebaddies) do
+          if eyebaddie ~= self then
+            local isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.pupilX, self.pupilY, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius)
+            if isIntersecting and (not stareSquareDist or stareSquareDist > intersectSquareDist) then
+              self.stareX = xIntersect
+              self.stareY = yIntersect
+              self.stareTarget = eyebaddie
+              stareSquareDist = intersectSquareDist
+            end
+          end
+        end
         if self.framesAlive % 3 == 0 and self.stateTime < 1.25 then
           local angle = self.eyeWhiteAngle + 1.80 * math.random() - 0.90
           local cosAngle = math.cos(angle)
@@ -231,6 +270,9 @@ local ENTITY_CLASSES = {
             duration = (0.12 + 0.08 * self.size) * (1.00 - 0.75 * math.min(1.00, self.stateTime / 1.25))
           })
         end
+      else
+        self.stareX = nil
+        self.stareY = nil
       end
       if self.timeStaredAt > 0.30 + 0.20 * self.size and self.staringPlayer and self.isAlive then
         self:die()
@@ -295,13 +337,14 @@ local ENTITY_CLASSES = {
       love.graphics.setColor(self.state == 'charging-laser' and COLORS.RED or COLORS.DARK_GREY)
       love.graphics.rectangle('fill', self.pupilX + shake - pupilSize / 2, self.pupilY - pupilSize / 2, pupilSize, pupilSize)
       -- Draw laser
-      if self.state == 'charging-laser' and self.stareTarget then
-        drawPixelatedLine(self.pupilX, self.pupilY, self.stareTarget.x, self.stareTarget.y, 1, 5, 3)
+      if self.state == 'charging-laser' and self.stareX and self.stareY then
+        local gap = math.max(math.ceil(7 - self.stateTime), 4)
+        drawPixelatedLine(self.pupilX, self.pupilY, self.stareX, self.stareY, 1, gap, 8 - gap)
       end
     end,
     startStaring = function(self, target)
       self:setState('staring')
-      self.stareTarget = target
+      self.intendedStareTarget = target
     end,
     shootLaser = function(self)
       self:setState('charging-laser')
@@ -393,6 +436,14 @@ function love.load()
     local eyebaddie = spawnEntity('eyebaddie', {
       x = 112.5, -- math.random(20, 205),
       y = 112.5, -- math.random(20, 205),
+      size = math.random(1, 4)
+    })
+    eyebaddie:startStaring(player)
+  end
+  for i = 1, 10 do
+    local eyebaddie = spawnEntity('eyebaddie', {
+      x = math.random(20, 205),
+      y = math.random(20, 205),
       size = math.random(1, 4)
     })
     eyebaddie:startStaring(player)
