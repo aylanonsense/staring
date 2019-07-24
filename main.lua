@@ -38,9 +38,14 @@ local ENTITY_CLASSES = {
     timeSinceLastDash = 0.00,
     facingX = 1,
     facingY = 0,
+    facingAngle = 0,
     stareX = nil,
     stareY = nil,
     stareTarget = nil,
+    eyeX = 0,
+    eyeY = 0,
+    pupilX = 0,
+    pupilY = 0,
     update = function(self, dt)
       -- Update timers
       self.stateTime = self.stateTime + dt
@@ -74,10 +79,10 @@ local ENTITY_CLASSES = {
       self.stareTarget = nil
       if self.state == 'staring' then
         self.stareX = self.x + 999 * self.facingX
-        self.stareY = self.y + 999 * self.facingY
+        self.stareY = self.y - 2 + 999 * self.facingY
         local stareSquareDist = nil
         for _, eyebaddie in ipairs(eyebaddies) do
-          local isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius)
+          local isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y - 2, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius)
           if isIntersecting and (not stareSquareDist or stareSquareDist > intersectSquareDist) then
             self.stareX = xIntersect
             self.stareY = yIntersect
@@ -97,14 +102,82 @@ local ENTITY_CLASSES = {
       elseif self.y > GAME_HEIGHT - self.radius then
         self.y = GAME_HEIGHT - self.radius
       end
+      -- Calc eye position
+      local pupilOffsetX = 0
+      local eyeOffsetX = 0
+      if self.facingX > 0.35 then
+        eyeOffsetX = 1
+        pupilOffsetX = 1
+      elseif self.facingX < -0.35 then
+        eyeOffsetX = -1
+        pupilOffsetX = -1
+      end
+      if self.vx < -10 then
+        eyeOffsetX = eyeOffsetX - 1
+      elseif self.vx > 10 then
+        eyeOffsetX = eyeOffsetX + 1
+      end
+      local pupilOffsetY = 0
+      local eyeOffsetY = 0
+      if self.facingY > 0.35 then
+        eyeOffsetY = 1
+        pupilOffsetY = 1
+      elseif self.facingY < -0.35 then
+        eyeOffsetY = -1
+        pupilOffsetY = -1
+      end
+      if self.vy < -10 then
+        eyeOffsetY = eyeOffsetY - 1
+      elseif self.vy > 10 then
+        eyeOffsetY = eyeOffsetY + 1
+      end
+      self.eyeX, self.eyeY = self.x + eyeOffsetX, self.y - 2 + eyeOffsetY
+      self.pupilX, self.pupilY = self.eyeX + pupilOffsetX, self.eyeY + pupilOffsetY
     end,
     draw = function(self)
-      love.graphics.setColor(COLORS.PURPLE)
-      love.graphics.circle('fill', self.x, self.y, self.radius)
+      -- Draw body
+      love.graphics.setColor(COLORS.PURE_WHITE)
+      local speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
+      local frame
+      if speed < 20 and self.state ~= 'dashing' then
+        frame = 1
+      else
+        local q = math.floor(8 * (self.facingAngle + math.pi) / (2 * math.pi) + 0.5) % 8
+        if q > 4 then
+          q = 8 - q
+        end
+        if q > 2 then
+          q = 4 - q
+        end
+        if q == 0 then
+          frame = 3
+        elseif q == 1 then
+          frame = 2
+        else
+          frame = 1
+        end
+        if speed > 1.10 * PLAYER_RUN_SPEED and frame ~= 1 then
+          frame = frame + 1
+        end
+      end
+      local flipped = self.facingX < 0
+      if self.state == 'dashing' then
+        for i = 0, 3 do
+          drawSprite(81 + 17 * (frame - 1), 34, 16, 17, self.x - (flipped and 10 or 6) - self.vx * i / 60, self.y - 10 - self.vy * i / 60, flipped)
+        end
+      else
+        drawSprite(81 + 17 * (frame - 1), 34, 16, 17, self.x - (flipped and 10 or 6), self.y - 10, flipped)
+      end
+      -- Draw laser
       if self.stareX and self.stareY then
         love.graphics.setColor(COLORS.PURPLE)
-        drawPixelatedLine(self.x, self.y, self.stareX, self.stareY)
+        drawPixelatedLine(self.x, self.y - 2, self.stareX, self.stareY)
       end
+      -- Draw eye
+      love.graphics.setColor(COLORS.PURE_WHITE)
+      drawSprite(149, 34, 8, 8, self.eyeX - 4, self.eyeY - 4)
+      love.graphics.setColor(COLORS.PURPLE)
+      love.graphics.rectangle('fill', self.pupilX - 1, self.pupilY - 1, 2, 2)
     end,
     mousepressed = function(self, x, y, button)
       if button == 1 then
@@ -141,10 +214,16 @@ local ENTITY_CLASSES = {
       end
     end,
     updateFacing = function(self)
-      local dirX, dirY = self:getAimDirection()
+      local dirX, dirY
+      if self.state == 'staring' then
+        dirX, dirY = self:getAimDirection()
+      else
+        dirX, dirY = self:getMoveDirection()
+      end
       if dirX ~= 0 or dirY ~= 0 then
         self.facingX = dirX
         self.facingY = dirY
+        self.facingAngle = math.atan2(dirY, dirX)
       end
     end,
     dash = function(self)
@@ -327,7 +406,7 @@ local ENTITY_CLASSES = {
           vy = 400 * math.sin(self.pupilAngle)
         })
       end
-      if self.timeStaredAt > 0.45 * self.size - 0.20 and self.staringPlayer and self.isAlive then
+      if self.timeStaredAt > 0.20 * self.size + 0.10 and self.staringPlayer and self.isAlive then
         self:die()
         -- Spawn some particles
         local dx = self.x - self.staringPlayer.x
@@ -622,15 +701,7 @@ function love.load()
   -- Load assets
   spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
   -- Spawn entities
-  local player = spawnEntity('player', { x = 30, y = 30 })
-  for i = 1, 1 do
-    local eyebaddie = spawnEntity('eyebaddie', {
-      x = 112.5, -- math.random(20, 205),
-      y = 112.5, -- math.random(20, 205),
-      size = math.random(1, 4)
-    })
-    eyebaddie:startStaring(player)
-  end
+  local player = spawnEntity('player', { x = 112.5, y = 112.5 })
   for i = 1, 10 do
     local eyebaddie = spawnEntity('eyebaddie', {
       x = math.random(20, 205),
