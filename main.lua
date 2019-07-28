@@ -5,6 +5,7 @@ local COLORS = {
   BLACK = { 11 / 255, 11 / 255, 4 / 255 },
   DARK_GREY = { 66 / 255, 64 / 255, 55 / 255 },
   PURPLE = { 157 / 255, 52 / 255, 204 / 255 },
+  GREEN = { 46 / 255, 106 / 255, 39 / 255 },
   RED = { 253 / 255, 42 / 255, 4 / 255 },
   WHITE = { 241 / 255, 241 / 255, 236 / 255 },
   PURE_WHITE = { 1, 1, 1 }
@@ -42,6 +43,9 @@ local ENTITY_CLASSES = {
     facingAngle = 0,
     stareX = nil,
     stareY = nil,
+    stareDirX = 1,
+    stareDirY = 0,
+    stareAngle = 0,
     stareTarget = nil,
     eyeX = 0,
     eyeY = 0,
@@ -49,28 +53,30 @@ local ENTITY_CLASSES = {
     pupilY = 0,
     health = 100,
     invincibilityFrames = 0,
+    isStaring = false,
     update = function(self, dt)
       local joystick = joysticks[self.joystickNum]
       self.invincibilityFrames = math.max(0, self.invincibilityFrames - 1)
       -- Update timers
       self.stateTime = self.stateTime + dt
       self.timeSinceLastDash = self.timeSinceLastDash + dt
-      if self.state ~= 'staring' and self:shouldBeStaring() then
+      if not self.isStaring and self:shouldBeStaring() then
         self:startStaring()
       end
       -- Transition states
       if self.state == 'dashing' and self.stateTime > 0.30 then
         self:setState('default')
-      elseif self.state == 'staring' and self.stateTime > 0.20 and not self:shouldBeStaring() then
-        self:setState('default')
+      elseif self.isStaring and self.stateTime > 0.20 and not self:shouldBeStaring() then
+        self.isStaring = false
       end
       self:updateFacing()
+      self:updateStareDirection()
       -- Degrade velocity while dashing or staring
-      if self.state == 'dashing' or self.state == 'staring' then
+      if self.state == 'dashing' then
         self.vx = self.vx * 0.85
         self.vy = self.vy * 0.85
       -- Control velocity with inputs
-      elseif self.state == 'default' then
+      else
         local dirX, dirY = self:getMoveDirection()
         self.vx = 0.7 * self.vx + 0.3 * dirX * PLAYER_RUN_SPEED
         self.vy = 0.7 * self.vy + 0.3 * dirY * PLAYER_RUN_SPEED
@@ -85,9 +91,9 @@ local ENTITY_CLASSES = {
       self.stareX = nil
       self.stareY = nil
       self.stareTarget = nil
-      if self.state == 'staring' then
-        self.stareX = self.x + 999 * self.facingX
-        self.stareY = self.y - 2 + 999 * self.facingY
+      if self.isStaring then
+        self.stareX = self.x + 999 * self.stareDirX
+        self.stareY = self.y - 2 + 999 * self.stareDirY
         local stareSquareDist = nil
         for _, eyebaddie in ipairs(eyebaddies) do
           local isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y - 2, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius)
@@ -115,9 +121,12 @@ local ENTITY_CLASSES = {
       local eyeOffsetX = 0
       if self.facingX > 0.35 then
         eyeOffsetX = 1
-        pupilOffsetX = 1
       elseif self.facingX < -0.35 then
         eyeOffsetX = -1
+      end
+      if self.stareDirX > 0.35 then
+        pupilOffsetX = 1
+      elseif self.stareDirX < -0.35 then
         pupilOffsetX = -1
       end
       if self.vx < -10 then
@@ -129,9 +138,12 @@ local ENTITY_CLASSES = {
       local eyeOffsetY = 0
       if self.facingY > 0.35 then
         eyeOffsetY = 1
-        pupilOffsetY = 1
       elseif self.facingY < -0.35 then
         eyeOffsetY = -1
+      end
+      if self.stareDirY > 0.35 then
+        pupilOffsetY = 1
+      elseif self.stareDirY < -0.35 then
         pupilOffsetY = -1
       end
       if self.vy < -10 then
@@ -143,6 +155,8 @@ local ENTITY_CLASSES = {
       self.pupilX, self.pupilY = self.eyeX + pupilOffsetX, self.eyeY + pupilOffsetY
     end,
     draw = function(self)
+      local color = self.playerNum == 1 and COLORS.PURPLE or COLORS.GREEN
+      local spriteOffset = self.playerNum == 1 and 0 or 18
       -- Draw body
       love.graphics.setColor(COLORS.PURE_WHITE)
       local speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
@@ -171,30 +185,30 @@ local ENTITY_CLASSES = {
       local flipped = self.facingX < 0
       if self.state == 'dashing' then
         for i = 0, 3 do
-          drawSprite(81 + 17 * (frame - 1), 34, 16, 17, self.x - (flipped and 10 or 6) - self.vx * i / 60, self.y - 10 - self.vy * i / 60, flipped)
+          drawSprite(81 + 17 * (frame - 1), 34 + spriteOffset, 16, 17, self.x - (flipped and 10 or 6) - self.vx * i / 60, self.y - 10 - self.vy * i / 60, flipped)
         end
       else
-        drawSprite(81 + 17 * (frame - 1), 34, 16, 17, self.x - (flipped and 10 or 6), self.y - 10, flipped)
+        drawSprite(81 + 17 * (frame - 1), 34 + spriteOffset, 16, 17, self.x - (flipped and 10 or 6), self.y - 10, flipped)
       end
       -- Draw laser
       if self.stareX and self.stareY then
-        love.graphics.setColor(COLORS.PURPLE)
+        love.graphics.setColor(color)
         drawPixelatedLine(self.x, self.y - 2, self.stareX, self.stareY)
       end
       -- Draw eye
       love.graphics.setColor(COLORS.PURE_WHITE)
-      drawSprite(149, 34, 8, 8, self.eyeX - 4, self.eyeY - 4)
-      love.graphics.setColor(COLORS.PURPLE)
+      drawSprite(149, 34 + spriteOffset, 8, 8, self.eyeX - 4, self.eyeY - 4)
+      love.graphics.setColor(color)
       love.graphics.rectangle('fill', self.pupilX - 1, self.pupilY - 1, 2, 2)
     end,
     keypressed = function(self, key)
-      if key == 'lshift' then
+      if key == 'lshift' and self.allowKeyboardControls then
         self:dash()
       end
     end,
     joystickpressed = function(self, joystick, btn)
       if joystick == joysticks[self.joystickNum] then
-        if btn == 1 or btn == 5 or btn == 7 then
+        if btn == 1 or fbtn == 5 or btn == 7 or btn == 6 or btn == 8 then
           self:dash()
         end
       end
@@ -218,7 +232,7 @@ local ENTITY_CLASSES = {
           end
           return mag * dirX / dist, mag * dirY / dist
         end
-      else
+      elseif self.allowKeyboardControls then
         local isPressingUp = love.keyboard.isDown('up') or love.keyboard.isDown('w')
         local isPressingLeft = love.keyboard.isDown('left') or love.keyboard.isDown('a')
         local isPressingDown = love.keyboard.isDown('down') or love.keyboard.isDown('s')
@@ -230,6 +244,8 @@ local ENTITY_CLASSES = {
           dirY = dirY * 0.707
         end
         return dirX, dirY
+      else
+        return 0, 0
       end
     end,
     getAimDirection = function(self)
@@ -249,7 +265,7 @@ local ENTITY_CLASSES = {
           end
           return mag * dirX / dist, mag * dirY / dist
         end
-      else
+      elseif self.allowMouseControls then
         local mouseX, mouseY = love.mouse.getPosition()
         if mouseX and mouseY then
           local dx = mouseX - self.x
@@ -257,25 +273,33 @@ local ENTITY_CLASSES = {
           local dist = math.sqrt(dx * dx + dy * dy)
           return dx / dist, dy / dist
         else
-          return 0, 0
+          return 0.0, 0.0
         end
+      else
+        return 0.0, 0.0
       end
     end,
     updateFacing = function(self)
-      local dirX, dirY
-      if self.state == 'staring' then
-        dirX, dirY = self:getAimDirection()
-      else
-        dirX, dirY = self:getMoveDirection()
-      end
+      local dirX, dirY = self:getMoveDirection()
       if dirX ~= 0 or dirY ~= 0 then
         self.facingX = dirX
         self.facingY = dirY
         self.facingAngle = math.atan2(dirY, dirX)
       end
     end,
+    updateStareDirection = function(self)
+      local dirX, dirY = self:getAimDirection()
+      if dirX == 0.0 and dirY == 0.0 then
+        dirX, dirY = self:getMoveDirection()
+      end
+      if dirX ~= 0 or dirY ~= 0 then
+        self.stareDirX = dirX
+        self.stareDirY = dirY
+        self.stareAngle = math.atan2(dirY, dirX)
+      end
+    end,
     dash = function(self)
-      if (self.state == 'default' or self.state == 'staring') and self.timeSinceLastDash > 0.40 then
+      if self.timeSinceLastDash > 0.40 then
         local dirX, dirY = self:getMoveDirection()
         if dirX ~= 0 or dirY ~= 0 then
           self.vx = PLAYER_DASH_SPEED * dirX
@@ -286,7 +310,7 @@ local ENTITY_CLASSES = {
       end
     end,
     startStaring = function(self)
-      self:setState('staring')
+      self.isStaring = true
     end,
     takeDamage = function(self)
       if self.invincibilityFrames <= 0 then
@@ -297,9 +321,15 @@ local ENTITY_CLASSES = {
     shouldBeStaring = function(self)
       local joystick = joysticks[self.joystickNum]
       if joystick then
-        return joystick:isDown(6) or joystick:isDown(8)
-      else
+        local dirX, dirY = self:getAimDirection()
+        if dirX ~= 0 and dirY ~= 0 then
+          return true
+        end
+        -- return joystick:isDown(6) or joystick:isDown(8)
+      elseif self.allowMouseControls then
         return love.mouse.isDown(1)
+      else
+        return false
       end
     end,
     setState = function(self, state)
@@ -344,7 +374,7 @@ local ENTITY_CLASSES = {
       if self.staringPlayer then
         self.timeStaredAt = self.timeStaredAt + dt
       else
-        self.timeStaredAt = 0.94 * self.timeStaredAt
+        self.timeStaredAt = math.max(0.00, self.timeStaredAt - dt / 4)
       end
       self.stateTime = self.stateTime + dt
       self.timeUntilUpdateEyeWhite = self.timeUntilUpdateEyeWhite - dt
@@ -768,8 +798,8 @@ function love.load()
   -- Load assets
   spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
   -- Spawn entities
-  spawnEntity('player', { x = 102, y = 112, joystickNum = 2 })
-  spawnEntity('player', { x = 123, y = 112, joystickNum = 1 })
+  spawnEntity('player', { x = 102, y = 112, playerNum = 1, joystickNum = 2, allowKeyboardControls = true, allowMouseControls = true })
+  spawnEntity('player', { x = 123, y = 112, playerNum = 2, joystickNum = 1 })
   addEntitiesToGame()
   for i = 1, 10 do
     local eyebaddie = spawnEntity('eyebaddie', {
