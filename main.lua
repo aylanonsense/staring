@@ -14,7 +14,7 @@ local PRE_SHOOT_PAUSE_TIME = 0.15
 local MORTAR_CHARGE_TIME = 1.50
 local PLAYER_RUN_SPEED = 40
 local PLAYER_DASH_SPEED = 300
-local MAX_PLAYERS = 1
+local MAX_PLAYERS = 2
 
 -- Assets
 local spriteSheet
@@ -23,6 +23,7 @@ local spriteSheet
 local lasersToShoot
 local timeUntilLaserVolley
 local timeUntilNextLaser
+local joysticks = {}
 local entities = {}
 local entitiesToBeAdded = {}
 local players = {}
@@ -46,14 +47,21 @@ local ENTITY_CLASSES = {
     eyeY = 0,
     pupilX = 0,
     pupilY = 0,
+    health = 100,
+    invincibilityFrames = 0,
     update = function(self, dt)
+      local joystick = joysticks[self.joystickNum]
+      self.invincibilityFrames = math.max(0, self.invincibilityFrames - 1)
       -- Update timers
       self.stateTime = self.stateTime + dt
       self.timeSinceLastDash = self.timeSinceLastDash + dt
+      if self.state ~= 'staring' and self:shouldBeStaring() then
+        self:startStaring()
+      end
       -- Transition states
       if self.state == 'dashing' and self.stateTime > 0.30 then
         self:setState('default')
-      elseif self.state == 'staring' and self.stateTime > 0.20 and not self:shouldStillBeStaring() then
+      elseif self.state == 'staring' and self.stateTime > 0.20 and not self:shouldBeStaring() then
         self:setState('default')
       end
       self:updateFacing()
@@ -179,38 +187,78 @@ local ENTITY_CLASSES = {
       love.graphics.setColor(COLORS.PURPLE)
       love.graphics.rectangle('fill', self.pupilX - 1, self.pupilY - 1, 2, 2)
     end,
-    mousepressed = function(self, x, y, button)
-      if button == 1 then
-        self:startStaring()
-      end
-    end,
     keypressed = function(self, key)
       if key == 'lshift' then
         self:dash()
       end
     end,
-    getMoveDirection = function(self)
-      local isPressingUp = love.keyboard.isDown('up') or love.keyboard.isDown('w')
-      local isPressingLeft = love.keyboard.isDown('left') or love.keyboard.isDown('a')
-      local isPressingDown = love.keyboard.isDown('down') or love.keyboard.isDown('s')
-      local isPressingRight = love.keyboard.isDown('right') or love.keyboard.isDown('d')
-      local dirX = (isPressingRight and 1 or 0) - (isPressingLeft and 1 or 0)
-      local dirY = (isPressingDown and 1 or 0) - (isPressingUp and 1 or 0)
-      if dirX ~= 0 and dirY ~= 0 then
-        dirX = dirX * 0.707
-        dirY = dirY * 0.707
+    joystickpressed = function(self, joystick, btn)
+      if joystick == joysticks[self.joystickNum] then
+        if btn == 1 or btn == 5 or btn == 7 then
+          self:dash()
+        end
       end
-      return dirX, dirY
+    end,
+    getMoveDirection = function(self)
+      local joystick = joysticks[self.joystickNum]
+      if joystick then
+        local dirX = joystick:getAxis(1)
+        local dirY = joystick:getAxis(2)
+        local dist = dirX and dirY and math.sqrt(dirX * dirX + dirY * dirY) or 0.0
+        if dist == 0.0 then
+          return 0.0, 0.0
+        else
+          local mag
+          if dist < 0.25 then
+            mag = 0.0
+          elseif dist < 0.5 then
+            mag = 0.5
+          else
+            mag = 1.0
+          end
+          return mag * dirX / dist, mag * dirY / dist
+        end
+      else
+        local isPressingUp = love.keyboard.isDown('up') or love.keyboard.isDown('w')
+        local isPressingLeft = love.keyboard.isDown('left') or love.keyboard.isDown('a')
+        local isPressingDown = love.keyboard.isDown('down') or love.keyboard.isDown('s')
+        local isPressingRight = love.keyboard.isDown('right') or love.keyboard.isDown('d')
+        local dirX = (isPressingRight and 1 or 0) - (isPressingLeft and 1 or 0)
+        local dirY = (isPressingDown and 1 or 0) - (isPressingUp and 1 or 0)
+        if dirX ~= 0 and dirY ~= 0 then
+          dirX = dirX * 0.707
+          dirY = dirY * 0.707
+        end
+        return dirX, dirY
+      end
     end,
     getAimDirection = function(self)
-      local mouseX, mouseY = love.mouse.getPosition()
-      if mouseX and mouseY then
-        local dx = mouseX - self.x
-        local dy = mouseY - self.y
-        local dist = math.sqrt(dx * dx + dy * dy)
-        return dx / dist, dy / dist
+      local joystick = joysticks[self.joystickNum]
+      if joystick then
+        local dirX = joystick:getAxis(3)
+        local dirY = joystick:getAxis(6)
+        local dist = dirX and dirY and math.sqrt(dirX * dirX + dirY * dirY) or 0.0
+        if dist == 0.0 then
+          return 0.0, 0.0
+        else
+          local mag
+          if dist < 0.25 then
+            mag = 0.0
+          else
+            mag = 1.0
+          end
+          return mag * dirX / dist, mag * dirY / dist
+        end
       else
-        return 0, 0
+        local mouseX, mouseY = love.mouse.getPosition()
+        if mouseX and mouseY then
+          local dx = mouseX - self.x
+          local dy = mouseY - self.y
+          local dist = math.sqrt(dx * dx + dy * dy)
+          return dx / dist, dy / dist
+        else
+          return 0, 0
+        end
       end
     end,
     updateFacing = function(self)
@@ -240,8 +288,19 @@ local ENTITY_CLASSES = {
     startStaring = function(self)
       self:setState('staring')
     end,
-    shouldStillBeStaring = function(self)
-      return love.mouse.isDown(1)
+    takeDamage = function(self)
+      if self.invincibilityFrames <= 0 then
+        self.health = self.health - 30
+        self.invincibilityFrames = 120
+      end
+    end,
+    shouldBeStaring = function(self)
+      local joystick = joysticks[self.joystickNum]
+      if joystick then
+        return joystick:isDown(6) or joystick:isDown(8)
+      else
+        return love.mouse.isDown(1)
+      end
     end,
     setState = function(self, state)
       self.state = state
@@ -659,6 +718,14 @@ local ENTITY_CLASSES = {
       self:applyVelocity(dt)
       if self.timeAlive > 1.50 then
         self:die()
+        for _, player in ipairs(players) do
+          local dx = player.x - self.x
+          local dy = player.y - self.y
+          local dist = math.sqrt(dx * dx + 4 * dy * dy)
+          if dist < 32 then
+            player:takeDamage()
+          end
+        end
         local startAngle = math.pi * math.random()
         local numPoofParticles = 60
         for i = 1, numPoofParticles do
@@ -701,14 +768,16 @@ function love.load()
   -- Load assets
   spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
   -- Spawn entities
-  local player = spawnEntity('player', { x = 112.5, y = 112.5 })
+  spawnEntity('player', { x = 102, y = 112, joystickNum = 2 })
+  spawnEntity('player', { x = 123, y = 112, joystickNum = 1 })
+  addEntitiesToGame()
   for i = 1, 10 do
     local eyebaddie = spawnEntity('eyebaddie', {
       x = math.random(20, 205),
       y = math.random(20, 205),
       size = math.random(1, 4)
     })
-    eyebaddie:startStaring(player)
+    eyebaddie:startStaring(players[1])
   end
   addEntitiesToGame()
   -- Move the eyebaddies so they aren't overlapping
@@ -780,6 +849,21 @@ function love.keypressed(...)
   end
 end
 
+function love.joystickadded(joystick)
+  for i = 1, MAX_PLAYERS do
+    if not joysticks[i] then
+      joysticks[i] = joystick
+      break
+    end
+  end
+end
+
+function love.joystickpressed(...)
+  for _, entity in ipairs(entities) do
+    entity:joystickpressed(...)
+  end
+end
+
 -- Spawns a new game entity
 function spawnEntity(className, params)
   -- Create a default entity
@@ -809,6 +893,7 @@ function spawnEntity(className, params)
     end,
     mousepressed = function(self, x, y) end,
     keypressed = function(self, key) end,
+    joystickpressed = function(self, joystick, btn) end,
     addToGame = function(self)
       table.insert(entities, self)
       if self.group then
