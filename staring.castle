@@ -1,8 +1,9 @@
 ---
 main: main.lua
-name: staring can be a form of harassment
-description: it's true
-primaryColor: F7F7F7
+name: staring [WIP]
+description: A game about staring for PlayNYC 2019!
+primaryColor: 0B0B04
 username: bridgs
 dimensions: 300x199
+coverImage: cover-image.png
 scaling: on
