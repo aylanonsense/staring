@@ -17,6 +17,7 @@ local PLAYER_RUN_SPEED = 100
 local PLAYER_DASH_SPEED = 600
 local MAX_PLAYERS = 2
 local ENEMY_SPEED = 45
+local DEBUG_START_TIME = 0.0
 
 -- Assets
 local spriteSheet
@@ -26,7 +27,7 @@ local spriteSheet
 -- local timeUntilLaserVolley
 -- local timeUntilNextLaser
 local levelData
-local levelFrame = 0
+local levelFrame
 local joysticks = {}
 local entities = {}
 local entitiesToBeAdded = {}
@@ -97,32 +98,32 @@ local ENTITY_CLASSES = {
       if self.isStaring then
         self.stareX = self.x + 999 * self.stareDirX
         self.stareY = self.y - 2 + 999 * self.stareDirY
-        -- local stareSquareDist = nil
-        -- for _, eyebaddie in ipairs(eyebaddies) do
-        --   local isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y - 2, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius)
-        --   if not isIntersecting and eyebaddie == oldStareTarget then
-        --     isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y - 2, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius + 20)
-        --   end
-        --   if isIntersecting then
-        --     if eyebaddie == oldStareTarget then
-        --       self.stareTarget = eyebaddie
-        --       break
-        --     end
-        --     if not stareSquareDist or stareSquareDist > intersectSquareDist then
-        --       -- self.stareX = xIntersect
-        --       -- self.stareY = yIntersect
-        --       self.stareTarget = eyebaddie
-        --       stareSquareDist = intersectSquareDist
-        --     end
-        --   end
-        -- end
-        -- if self.stareTarget then
-        --   local dx = self.stareTarget.x - self.x
-        --   local dy = self.stareTarget.y - self.y
-        --   local dist = math.sqrt(dx * dx + dy * dy)
-        --   self.stareX = self.x + 999 * dx / dist
-        --   self.stareY = self.y + 999 * dy / dist
-        -- end
+        local stareSquareDist = nil
+        for _, eyebaddie in ipairs(eyebaddies) do
+          local isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y - 2, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius)
+          if not isIntersecting and (not oldStareTarget or eyebaddie == oldStareTarget) then
+            isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y - 2, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius + 20)
+          end
+          if isIntersecting then
+            if eyebaddie == oldStareTarget then
+              self.stareTarget = eyebaddie
+              break
+            end
+            if not stareSquareDist or stareSquareDist > intersectSquareDist then
+              -- self.stareX = xIntersect
+              -- self.stareY = yIntersect
+              self.stareTarget = eyebaddie
+              stareSquareDist = intersectSquareDist
+            end
+          end
+        end
+        if self.stareTarget then
+          local dx = self.stareTarget.x - self.x
+          local dy = self.stareTarget.y - self.y
+          local dist = math.sqrt(dx * dx + dy * dy)
+          self.stareX = self.x + 999 * dx / dist
+          self.stareY = self.y + 999 * dy / dist
+        end
       end
       -- Keep player in bounds
       if self.x < self.radius then
@@ -413,7 +414,10 @@ local ENTITY_CLASSES = {
       self.staringPlayer = false
       for _, player in ipairs(players) do
         if player.isStaring and player.stareX and player.stareY then
-          local isIntersecting = calcCircleLineIntersection(player.x, player.y - 2, player.stareX, player.stareY, self.x, self.y, self.radius + 5)
+          local dx = player.x - self.x
+          local dy = player.y - self.y
+          local dist = math.sqrt(dx * dx + dy * dy)
+          local isIntersecting = calcCircleLineIntersection(player.x, player.y - 2, player.stareX, player.stareY, self.x, self.y, self.radius + math.min(dist / 18, 8))
           if isIntersecting then
             self.staringPlayer = player
             break
@@ -693,20 +697,20 @@ local ENTITY_CLASSES = {
       self.vx = self.vx * 0.91
       self.vy = self.vy * 0.91
       self:applyVelocity(dt)
-      if self.x < self.radius then
-        self.x = self.radius
-        self.vx = math.abs(self.vx)
-      elseif self.x > GAME_WIDTH - self.radius then
-        self.x = GAME_WIDTH - self.radius
-        self.vx = -math.abs(self.vx)
-      end
-      if self.y < self.radius then
-        self.y = self.radius
-        self.vy = math.abs(self.vy)
-      elseif self.y > GAME_HEIGHT - self.radius then
-        self.y = GAME_HEIGHT - self.radius
-        self.vy = -math.abs(self.vy)
-      end
+      -- if self.x < self.radius then
+      --   self.x = self.radius
+      --   self.vx = math.abs(self.vx)
+      -- elseif self.x > GAME_WIDTH - self.radius then
+      --   self.x = GAME_WIDTH - self.radius
+      --   self.vx = -math.abs(self.vx)
+      -- end
+      -- if self.y < self.radius then
+      --   self.y = self.radius
+      --   self.vy = math.abs(self.vy)
+      -- elseif self.y > GAME_HEIGHT - self.radius then
+      --   self.y = GAME_HEIGHT - self.radius
+      --   self.vy = -math.abs(self.vy)
+      -- end
     end,
     draw = function(self)
       drawSprite(121 + 11 * (4 - self.size), self.isRed and 12 or 1, 10, 10, self.x - 5, self.y - 5)
@@ -848,6 +852,7 @@ local ENTITY_CLASSES = {
 }
 
 function love.load()
+  levelFrame = DEBUG_START_TIME * 60
   levelData = generateLevelData()
   -- lasersToShoot = 0
   -- timeUntilLaserVolley = 1.00
@@ -890,14 +895,14 @@ function love.update(dt)
         local n = math.floor((levelFrame - frame) / timeBetween)
         if n < amount then
           local x = entry.x or (GAME_WIDTH + 15)
-          local y = entry.y or math.random(20, GAME_HEIGHT - 20)
+          local y = entry.y or math.random(7, GAME_HEIGHT - 7)
           local vx = entry.vx or -ENEMY_SPEED
           local vy = entry.vy or 0
           local size = entry.size or math.random(1, 4)
           local shootAngle = entry.shootAngle
           local shootTime = nil
           if entry.shoot ~= false then
-            shootTime = entry.shootTime or 1.0
+            shootTime = entry.shootTime or 0.65
           end
           spawnEntity('eyebaddie', {
             x = x + (entry.dx or 0) * n,
@@ -992,21 +997,36 @@ function love.joystickreleased(...)
 end
 
 function generateLevelData()
-  local minY = 20
-  local maxY = GAME_HEIGHT - 20
+  local minY = 7
+  local maxY = GAME_HEIGHT - 7
+  local centerY = GAME_HEIGHT / 2
   return {
     0.5,
     -- Random small eyes
-    { size = 1, shoot = false, amount = 10, timeBetween = 1.0 },
-    10,
+    { size = 1, shoot = false, amount = 5, timeBetween = 1.5 }, 7.5,
+    { size = 1, shoot = false, amount = 5, timeBetween = 1.0 }, 5,
     -- Eye lines
-    { size = 1, y = math.random(minY, maxY), shoot = false, amount = 6, timeBetween = 0.4 },
-    3,
-    { size = 1, y = math.random(minY, maxY), shoot = false, amount = 6, timeBetween = 0.4 },
-    3,
-    { size = 1, y = math.random(minY, maxY), shoot = false, amount = 6, timeBetween = 0.4 },
-    7,
-    { size = 1, shootAngle = 0, amount = 6, timeBetween = 1.2 }
+    { size = 1, y = math.random(minY, maxY), shoot = false, amount = 6, timeBetween = 0.4 }, 3,
+    { size = 1, y = math.random(minY, maxY), shoot = false, amount = 6, timeBetween = 0.4 }, 3,
+    { size = 1, y = math.random(minY, maxY), shoot = false, amount = 6, timeBetween = 0.4 }, 3,
+    -- Shootin lasers
+    { size = 1, shootAngle = 0, amount = 5, timeBetween = 1.2 }, 7,
+    { size = 1, y = math.random(minY, maxY - 100), shootAngle = 0, amount = 5, dy = 10, timeBetween = 0.4 }, 4,
+    { size = 1, y = math.random(minY + 100, maxY), shootAngle = 0, amount = 5, dy = -10, timeBetween = 0.4 }, 3,
+    -- Vertical lasers,
+    { size = 2, y = minY + 5, shootAngle = -90, amount = 3, timeBetween = 2.8 }, 1.4,
+    { size = 2, y = maxY - 5, shootAngle = 90, amount = 3, timeBetween = 2.8 }, 11,
+    -- Speedy small ones
+    { size = 1, vx = -100, shoot = false, amount = 60, timeBetween = 0.12 }, 1,
+    { size = 2, vx = -100, shoot = false, amount = 5, timeBetween = 1.00 }, 8,
+    -- Diagonals
+    { size = 2, vx = -75, y = centerY + 15, shootAngle = 45, amount = 5, timeBetween = 1.6 }, 0.8,
+    { size = 2, vx = -75, y = centerY - 15, shootAngle = -45, amount = 5, timeBetween = 1.6 }, 8,
+    -- Shooty lines
+    { size = 1, vx = -75, y = math.random(centerY + 20, maxY), shootAngle = 90, amount = 6, timeBetween = 0.15 }, 3,
+    { size = 1, vx = -75, y = math.random(minY, centerY - 20), shootAngle = -90, amount = 6, timeBetween = 0.15 }, 3,
+    { size = 1, vx = -75, y = math.random(centerY + 20, maxY), shootAngle = 90, amount = 6, timeBetween = 0.15 }, 3,
+    { size = 1, vx = -75, y = math.random(minY, centerY - 20), shootAngle = -90, amount = 6, timeBetween = 0.15 }, 3,
   }
 end
 
