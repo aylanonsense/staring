@@ -88,7 +88,12 @@ local ENTITY_CLASSES = {
       self:applyVelocity(dt)
       -- Check for collisions
       for _, eyebaddie in ipairs(eyebaddies) do
-        handleCollision(self, eyebaddie)
+        local dx = self.x - eyebaddie.x
+        local dy = self.y - eyebaddie.y
+        local dist = math.sqrt(dx * dx + dy * dy)
+        if dist < eyebaddie.radius + self.radius then
+          self:takeDamage()
+        end
       end
       -- Update the point the player is staring at
       local oldStareTarget = self.stareTarget
@@ -98,11 +103,25 @@ local ENTITY_CLASSES = {
       if self.isStaring then
         self.stareX = self.x + 999 * self.stareDirX
         self.stareY = self.y - 2 + 999 * self.stareDirY
+        for _, player in ipairs(players) do
+          if player ~= self then
+            local isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y - 2, self.stareX, self.stareY, player.x, player.y, player.radius)
+            if isIntersecting then
+              self.stareX = xIntersect
+              self.stareY = yIntersect
+              self.stareTarget = player
+              oldStareTarget = nil
+            end
+          end
+        end
         local stareSquareDist = nil
         for _, eyebaddie in ipairs(eyebaddies) do
           local isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y - 2, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius)
           if not isIntersecting and (not oldStareTarget or eyebaddie == oldStareTarget) then
-            isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y - 2, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius + 20)
+            local dx = eyebaddie.x - self.x
+            local dy = eyebaddie.y - self.y
+            local dist = math.sqrt(dx * dx + dy * dy)
+            isIntersecting, xIntersect, yIntersect, intersectSquareDist = calcCircleLineIntersection(self.x, self.y - 2, self.stareX, self.stareY, eyebaddie.x, eyebaddie.y, eyebaddie.radius + math.min(dist / 4, 15))
           end
           if isIntersecting then
             if eyebaddie == oldStareTarget then
@@ -117,7 +136,7 @@ local ENTITY_CLASSES = {
             end
           end
         end
-        if self.stareTarget then
+        if self.stareTarget and self.stareTarget.type ~= 'player' then
           local dx = self.stareTarget.x - self.x
           local dy = self.stareTarget.y - self.y
           local dist = math.sqrt(dx * dx + dy * dy)
@@ -126,15 +145,15 @@ local ENTITY_CLASSES = {
         end
       end
       -- Keep player in bounds
-      if self.x < self.radius then
-        self.x = self.radius
-      elseif self.x > GAME_WIDTH - self.radius then
-        self.x = GAME_WIDTH - self.radius
+      if self.x < self.radius + 5 then
+        self.x = self.radius + 5
+      elseif self.x > GAME_WIDTH - self.radius - 5 then
+        self.x = GAME_WIDTH - self.radius - 5
       end
-      if self.y < self.radius then
-        self.y = self.radius
-      elseif self.y > GAME_HEIGHT - self.radius then
-        self.y = GAME_HEIGHT - self.radius
+      if self.y < self.radius + 5 then
+        self.y = self.radius + 5
+      elseif self.y > GAME_HEIGHT - self.radius - 5 then
+        self.y = GAME_HEIGHT - self.radius - 5
       end
       -- Calc eye position
       local pupilOffsetX = 0
@@ -177,49 +196,52 @@ local ENTITY_CLASSES = {
     draw = function(self)
       local color = self.playerNum == 1 and COLORS.PURPLE or COLORS.GREEN
       local spriteOffset = self.playerNum == 1 and 0 or 18
-      -- Draw body
-      love.graphics.setColor(COLORS.PURE_WHITE)
-      local speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
-      local frame
-      if speed < 20 and self.state ~= 'dashing' then
-        frame = 1
-      else
-        local q = math.floor(8 * (self.facingAngle + math.pi) / (2 * math.pi) + 0.5) % 8
-        if q > 4 then
-          q = 8 - q
-        end
-        if q > 2 then
-          q = 4 - q
-        end
-        if q == 0 then
-          frame = 3
-        elseif q == 1 then
-          frame = 2
-        else
-          frame = 1
-        end
-        if speed > 1.10 * PLAYER_RUN_SPEED and frame ~= 1 then
-          frame = frame + 1
-        end
-      end
-      local flipped = self.facingX < 0
-      if self.state == 'dashing' then
-        for i = 0, 3 do
-          drawSprite(81 + 17 * (frame - 1), 34 + spriteOffset, 16, 17, self.x - (flipped and 10 or 6) - self.vx * i / 60, self.y - 10 - self.vy * i / 60, flipped)
-        end
-      else
-        drawSprite(81 + 17 * (frame - 1), 34 + spriteOffset, 16, 17, self.x - (flipped and 10 or 6), self.y - 10, flipped)
-      end
       -- Draw laser
+      love.graphics.setColor(color)
       if self.stareX and self.stareY then
         love.graphics.setColor(color)
         drawPixelatedLine(self.x, self.y - 2, self.stareX, self.stareY)
       end
-      -- Draw eye
-      love.graphics.setColor(COLORS.PURE_WHITE)
-      drawSprite(149, 34 + spriteOffset, 8, 8, self.eyeX - 4, self.eyeY - 4)
-      love.graphics.setColor(color)
-      love.graphics.rectangle('fill', self.pupilX - 1, self.pupilY - 1, 2, 2)
+      if self.invincibilityFrames % 20 < 10 then
+        -- Draw body
+        love.graphics.setColor(COLORS.PURE_WHITE)
+        local speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
+        local frame
+        if speed < 20 and self.state ~= 'dashing' then
+          frame = 1
+        else
+          local q = math.floor(8 * (self.facingAngle + math.pi) / (2 * math.pi) + 0.5) % 8
+          if q > 4 then
+            q = 8 - q
+          end
+          if q > 2 then
+            q = 4 - q
+          end
+          if q == 0 then
+            frame = 3
+          elseif q == 1 then
+            frame = 2
+          else
+            frame = 1
+          end
+          if speed > 1.10 * PLAYER_RUN_SPEED and frame ~= 1 then
+            frame = frame + 1
+          end
+        end
+        local flipped = self.facingX < 0
+        if self.state == 'dashing' then
+          for i = 0, 3 do
+            drawSprite(81 + 17 * (frame - 1), 34 + spriteOffset, 16, 17, self.x - (flipped and 10 or 6) - self.vx * i / 60, self.y - 10 - self.vy * i / 60, flipped)
+          end
+        else
+          drawSprite(81 + 17 * (frame - 1), 34 + spriteOffset, 16, 17, self.x - (flipped and 10 or 6), self.y - 10, flipped)
+        end
+        -- Draw eye
+        love.graphics.setColor(COLORS.PURE_WHITE)
+        drawSprite(149, 34 + spriteOffset, 8, 8, self.eyeX - 4, self.eyeY - 4)
+        love.graphics.setColor(color)
+        love.graphics.rectangle('fill', self.pupilX - 1, self.pupilY - 1, 2, 2)
+      end
     end,
     keypressed = function(self, key)
       if key == 'lshift' and self.allowKeyboardControls then
@@ -288,6 +310,7 @@ local ENTITY_CLASSES = {
       elseif self.allowMouseControls then
         local mouseX, mouseY = love.mouse.getPosition()
         if mouseX and mouseY then
+          mouseY = mouseY - 24
           local dx = mouseX - self.x
           local dy = mouseY - self.y
           local dist = math.sqrt(dx * dx + dy * dy)
@@ -332,8 +355,8 @@ local ENTITY_CLASSES = {
       self.isStaring = true
     end,
     takeDamage = function(self)
-      if self.invincibilityFrames <= 0 then
-        self.health = self.health - 30
+      if self.invincibilityFrames <= 0 and self.state ~= 'dashing' then
+        self.health = math.max(0, self.health - 29)
         self.invincibilityFrames = 120
       end
     end,
@@ -547,8 +570,8 @@ local ENTITY_CLASSES = {
         spawnEntity('blast', {
           x = self.pupilX,
           y = self.pupilY,
-          vx = 400 * math.cos(self.pupilAngle),
-          vy = 400 * math.sin(self.pupilAngle)
+          vx = 999 * math.cos(self.pupilAngle),
+          vy = 999 * math.sin(self.pupilAngle)
         })
       end
       if self.state == 'charging' and self.projectileType == 'laser' and self.stateTime >= LASER_CHARGE_TIME + PRE_SHOOT_PAUSE_TIME then
@@ -607,6 +630,14 @@ local ENTITY_CLASSES = {
       if self.state == 'shooting' and self.stateTime > 0.75 and self.projectileType ~= 'laser' then
         self:setState('default')
       end
+      if self.state == 'shooting' and self.projectileType == 'laser' then
+        for _, player in ipairs(players) do
+          local isIntersecting = calcCircleLineIntersection(self.pupilX, self.pupilY, self.pupilX + 999 * math.cos(self.pupilAngle), self.pupilY + 999 * math.sin(self.pupilAngle), player.x, player.y, player.radius)
+          if isIntersecting then
+            player:takeDamage()
+          end
+        end
+      end
       self:applyVelocity(dt)
       if self.x < -20 then
         self:die()
@@ -661,10 +692,10 @@ local ENTITY_CLASSES = {
       love.graphics.rectangle('fill', self.pupilX + offsetX - pupilSize / 2, self.pupilY + offsetY - pupilSize / 2, pupilSize, pupilSize)
       -- Draw laser
       if self.state == 'charging' and (self.projectileType == 'blast' or self.projectileType == 'laser') then
-        drawPixelatedLine(self.pupilX, self.pupilY, self.pupilX + 400 * math.cos(self.pupilAngle), self.pupilY + 400 * math.sin(self.pupilAngle), 1, 4, 1)
+        drawPixelatedLine(self.pupilX, self.pupilY, self.pupilX + 999 * math.cos(self.pupilAngle), self.pupilY + 999 * math.sin(self.pupilAngle), 1, 4, 1)
       end
       if self.state == 'shooting' and self.projectileType == 'laser' then
-        drawPixelatedLine(self.pupilX, self.pupilY, self.pupilX + 400 * math.cos(self.pupilAngle), self.pupilY + 400 * math.sin(self.pupilAngle), 2)
+        drawPixelatedLine(self.pupilX, self.pupilY, self.pupilX + 999 * math.cos(self.pupilAngle), self.pupilY + 999 * math.sin(self.pupilAngle), 2)
       end
     end,
     shoot = function(self)
@@ -925,6 +956,14 @@ function love.update(dt)
   end
   addEntitiesToGame()
   removeEntitiesFromGame()
+  for i, player in ipairs(players) do
+    for j, other in ipairs(players) do
+      if i < j and player.stareTarget == other and other.stareTarget == player then
+        player.health = math.min(100, player.health + 15 * dt)
+        other.health = math.min(100, other.health + 15 * dt)
+      end
+    end
+  end
   -- timeUntilLaserVolley = timeUntilLaserVolley - dt
   -- if timeUntilLaserVolley <= 0.00 then
   --   lasersToShoot = 3
@@ -951,6 +990,9 @@ end
 function love.draw()
   -- Clear the screen
   love.graphics.clear(COLORS.BLACK)
+  love.graphics.push()
+  love.graphics.translate(0, 24)
+  love.graphics.setScissor(0, 24, GAME_WIDTH, GAME_HEIGHT)
   -- Draw entities
   for _, entity in ipairs(entities) do
     love.graphics.setColor(COLORS.PURE_WHITE)
@@ -959,6 +1001,29 @@ function love.draw()
   for _, entity in ipairs(entities) do
     love.graphics.setColor(COLORS.PURE_WHITE)
     entity:draw()
+  end
+  love.graphics.pop()
+  -- Draw ui
+  love.graphics.setScissor()
+  if players[1] then
+    love.graphics.setColor(COLORS.PURE_WHITE)
+    drawSprite(160, 35, 7, 6, 10, 5)
+    love.graphics.setColor(COLORS.PURPLE)
+    love.graphics.rectangle('fill', 20, 5, 70, 6)
+    love.graphics.setColor(COLORS.BLACK)
+    love.graphics.rectangle('fill', 21, 6, 68, 4)
+    love.graphics.setColor(COLORS.PURPLE)
+    love.graphics.rectangle('fill', 20, 5, 70 * players[1].health / 100, 6)
+  end
+  if players[2] then
+    love.graphics.setColor(COLORS.PURE_WHITE)
+    drawSprite(160, 53, 7, 6, 10, 15)
+    love.graphics.setColor(COLORS.GREEN)
+    love.graphics.rectangle('fill', 20, 15, 70, 6)
+    love.graphics.setColor(COLORS.BLACK)
+    love.graphics.rectangle('fill', 21, 16, 68, 4)
+    love.graphics.setColor(COLORS.GREEN)
+    love.graphics.rectangle('fill', 20, 15, 70 * players[2].health / 100, 6)
   end
 end
 
