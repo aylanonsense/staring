@@ -15,6 +15,11 @@ local PLAYER_DASH_SPEED = 600
 local PLAYER_DASH_FRICTION = 0.15
 local PLAYER_DASH_DURATION = 0.25
 local PLAYER_DASH_COOLDOWN = 0.10
+local LASER_MARGIN = {
+  TOP = 20,
+  SIDE = 10,
+  BOTTOM = 10
+}
 
 -- Assets
 local spriteSheet
@@ -93,6 +98,23 @@ local ENTITY_CLASSES = {
       if self.isAiming then
         self.targetX = self.x + 999 * self.aimX
         self.targetY = self.y + 999 * self.aimY
+        -- Keep target in bounds
+        if self.targetX < -LASER_MARGIN.SIDE then
+          self.targetX = -LASER_MARGIN.SIDE
+          self.targetY = self.y + self.aimY / self.aimX * (-LASER_MARGIN.SIDE - self.x)
+        end
+        if self.targetX > GAME_WIDTH + LASER_MARGIN.SIDE then
+          self.targetX = GAME_WIDTH + LASER_MARGIN.SIDE
+          self.targetY = self.y + self.aimY / self.aimX * (GAME_WIDTH + LASER_MARGIN.SIDE - self.x)
+        end
+        if self.targetY < -LASER_MARGIN.TOP then
+          self.targetX = self.x + self.aimX / self.aimY * (-LASER_MARGIN.TOP - self.y)
+          self.targetY = -LASER_MARGIN.TOP
+        end
+        if self.targetY > GAME_HEIGHT + LASER_MARGIN.BOTTOM then
+          self.targetX = self.x + self.aimX / self.aimY * (GAME_HEIGHT + LASER_MARGIN.BOTTOM - self.y)
+          self.targetY = GAME_HEIGHT + LASER_MARGIN.BOTTOM
+        end
       else
         self.targetX = nil
         self.targetY = nil
@@ -179,14 +201,10 @@ function love.draw()
   -- Clear the screen
   love.graphics.clear(COLOR.WHITE)
   -- Draw the background
-  drawSprite(0, 0, 300, 163, 5, 30)
+  drawSprite(0, 0, 300, 163, 5, 21)
   -- Draw the game
   love.graphics.push()
   love.graphics.translate(GAME_X, GAME_Y)
-  love.graphics.setScissor(GAME_X, GAME_Y, GAME_WIDTH, GAME_HEIGHT)
-  -- Draw a border around the game area
-  love.graphics.setColor(1, 0, 0)
-  love.graphics.rectangle('line', 0, 0, GAME_WIDTH, GAME_HEIGHT)
   -- Draw entities
   for _, entity in ipairs(entities) do
     love.graphics.setColor(COLOR.PURE_WHITE)
