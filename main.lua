@@ -30,6 +30,9 @@ local mouseAndKeyboardController
 local joystickControllers
 local playerControllers
 
+-- Entity groups
+local obstacles = {}
+
 -- Entity variables
 local entities
 local newEntities
@@ -37,6 +40,11 @@ local newEntities
 -- Entity classes
 local ENTITY_CLASSES = {
   player = {
+    groups = { obstacles },
+    eyeX = -999,
+    eyeY = -999,
+    eyeRadius = 5,
+    radius = 5,
     facingX = 1.0,
     facingY = 0.0,
     aimX = 1.0,
@@ -83,6 +91,12 @@ local ENTITY_CLASSES = {
         self.vy = speed * moveY * moveMagnitude
       end
       self:applyVelocity(dt)
+      -- Check for collisions
+      for _, obstacle in ipairs(obstacles) do
+        if obstacle ~= self then
+          handleCircleToCircleCollision(self, obstacle)
+        end
+      end
       -- Keep player in bounds
       self.x = math.min(math.max(self.radius, self.x), GAME_WIDTH - self.radius)
       self.y = math.min(math.max(self.radius, self.y), GAME_HEIGHT - self.radius)
@@ -95,9 +109,25 @@ local ENTITY_CLASSES = {
         self.aimX = moveX
         self.aimY = moveY
       end
-      if self.isAiming then
+      if not self.isAiming then
+        self.target = nil
+        self.targetX = nil
+        self.targetY = nil
+      else
+        self.target = nil
         self.targetX = self.x + 999 * self.aimX
         self.targetY = self.y + 999 * self.aimY
+        -- See if the we're aiming at anything
+        for _, obstacle in ipairs(obstacles) do
+          if obstacle ~= self then
+            local isIntersecting, x, y = calcCircleLineIntersection(self.x, self.y, self.targetX, self.targetY, obstacle.eyeX, obstacle.eyeY, obstacle.eyeRadius)
+            if isIntersecting then
+              self.target = obstacle
+              self.targetX = x
+              self.targetY = y
+            end
+          end
+        end
         -- Keep target in bounds
         if self.targetX < -LASER_MARGIN.SIDE then
           self.targetX = -LASER_MARGIN.SIDE
@@ -115,10 +145,10 @@ local ENTITY_CLASSES = {
           self.targetX = self.x + self.aimX / self.aimY * (GAME_HEIGHT + LASER_MARGIN.BOTTOM - self.y)
           self.targetY = GAME_HEIGHT + LASER_MARGIN.BOTTOM
         end
-      else
-        self.targetX = nil
-        self.targetY = nil
       end
+      -- Update eye position
+      self.eyeX = self.x
+      self.eyeY = self.y - 3
     end,
     draw = function(self)
       love.graphics.setColor(COLOR.LIGHT_GREY)
@@ -130,6 +160,17 @@ local ENTITY_CLASSES = {
     end,
     getController = function(self)
       return playerControllers[self.playerNum] or blankController
+    end
+  },
+  baddie = {
+    eyeX = -999,
+    eyeY = -999,
+    eyeRadius = 5,
+    groups = { obstacles },
+    isPushable = false,
+    update = function(self, dt)
+      self.eyeX = self.x
+      self.eyeY = self.y - 3
     end
   }
 }
@@ -156,6 +197,10 @@ function love.load()
     playerNum = 2,
     x = 100,
     y = 50
+  })
+  spawnEntity('baddie', {
+    x = 200,
+    y = 75
   })
   addNewEntitiesToGame()
 end
@@ -251,7 +296,7 @@ function spawnEntity(className, params)
     y = 0,
     vx = 0,
     vy = 0,
-    isStationary = false,
+    isPushable = true,
     init = function(self) end,
     update = function(self, dt)
       self:applyVelocity(dt)
@@ -266,8 +311,10 @@ function spawnEntity(className, params)
     end,
     addToGame = function(self)
       table.insert(entities, self)
-      if self.group then
-        table.insert(self.group, self)
+      if self.groups then
+        for _, group in ipairs(self.groups) do
+          table.insert(group, self)
+        end
       end
     end,
     removeFromGame = function(self)
@@ -277,11 +324,13 @@ function spawnEntity(className, params)
           break
         end
       end
-      if self.group then
-        for i = 1, #self.group do
-          if self.group[i] == self then
-            table.remove(self.group, i)
-            break
+      if self.groups then
+        for _, group in ipairs(self.groups) do
+          for i = 1, #group do
+            if group[i] == self then
+              table.remove(group, i)
+              break
+            end
           end
         end
       end
@@ -347,10 +396,10 @@ function handleCircleToCircleCollision(entity1, entity2)
     local dist = math.sqrt(squareDist)
     local pushAmount = sumRadii - dist
     -- Push one away from the other
-    if entity2.isStationary and not entity1.isStationary then
+    if entity1.isPushable and not entity2.isPushable then
       entity1.x = entity1.x - pushAmount * dx / dist
       entity1.y = entity1.y - pushAmount * dy / dist
-    elseif entity1.isStationary and not entity2.isStationary then
+    elseif entity2.isPushable and not entity1.isPushable then
       entity2.x = entity2.x + pushAmount * dx / dist
       entity2.y = entity2.y + pushAmount * dy / dist
     -- Push them both away from each other
