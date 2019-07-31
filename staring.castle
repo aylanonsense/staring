@@ -4,6 +4,7 @@ name: staring [WIP]
 description: A game about staring for PlayNYC 2019!
 primaryColor: 0B0B04
 username: bridgs
-dimensions: 300x199
+dimensions: 310x200
 coverImage: cover-image.png
 scaling: on
+ 

@@ -1,29 +1,140 @@
+local Controllers = require('src/Controller.lua')
+
 -- Constants
-local GAME_WIDTH = 300
-local GAME_HEIGHT = 175
-local GAME_OFFSET_X = 5
-local GAME_OFFSET_Y = 20
-local COLORS = {
+local COLOR = {
+  LIGHT_GREY = { 205 / 255, 205 / 255, 205 / 255 }, -- #cdcdcd
   WHITE = { 243 / 255, 241 / 255, 241 / 255 }, -- #f3f1f1
   PURE_WHITE = { 1, 1, 1 } -- #ffffff
 }
+local GAME_X = 27
+local GAME_Y = 65
+local GAME_WIDTH = 256
+local GAME_HEIGHT = 105
+local PLAYER_MOVE_SPEED = 60
+local PLAYER_DASH_SPEED = 600
+local PLAYER_DASH_FRICTION = 0.15
+local PLAYER_DASH_DURATION = 0.25
+local PLAYER_DASH_COOLDOWN = 0.10
 
 -- Assets
 local spriteSheet
 
--- Game variables
-local entities = {}
-local newEntities = {}
+-- Input variables
+local blankController
+local mouseAndKeyboardController
+local joystickControllers
+local playerControllers
+
+-- Entity variables
+local entities
+local newEntities
 
 -- Entity classes
-local ENTITY_CLASSES = {}
+local ENTITY_CLASSES = {
+  player = {
+    facingX = 1.0,
+    facingY = 0.0,
+    aimX = 1.0,
+    aimY = 0.0,
+    isDashing = false,
+    dashDuration = 0.00,
+    dashCooldown = 0.00,
+    isAiming = false,
+    targetX = nil,
+    targetY = nil,
+    update = function(self, dt)
+      local controller = self:getController()
+      -- Calculate player facing
+      local moveX, moveY, moveMagnitude = controller:getMoveDirection()
+      if moveMagnitude >= 0.0 then
+        self.facingX = moveX
+        self.facingY = moveY
+      end
+      -- Handle dashes
+      self.dashCooldown = math.max(0.00, self.dashCooldown - dt)
+      if self.dashDuration > 0.00 then
+        self.dashDuration = math.max(0.00, self.dashDuration - dt)
+        if self.dashDuration <= 0.00 then
+          self.isDashing = false
+        end
+      end
+      if controller:justStartedDashing() and self.dashCooldown <= 0.00 then
+        self.isAiming = false
+        self.isDashing = true
+        self.dashDuration = PLAYER_DASH_DURATION
+        self.dashCooldown = PLAYER_DASH_DURATION + PLAYER_DASH_COOLDOWN
+        self.vx = PLAYER_DASH_SPEED * self.facingX
+        self.vy = PLAYER_DASH_SPEED * self.facingY
+      end
+      -- Determine whether the player is aiming
+      self.isAiming = controller:isAiming() and not self.isDashing
+      -- Move the player
+      if self.isDashing then
+        self.vx = self.vx * (1 - PLAYER_DASH_FRICTION)
+        self.vy = self.vy * (1 - PLAYER_DASH_FRICTION)
+      else
+        local speed = self.isAiming and 0 or PLAYER_MOVE_SPEED
+        self.vx = speed * moveX * moveMagnitude
+        self.vy = speed * moveY * moveMagnitude
+      end
+      self:applyVelocity(dt)
+      -- Keep player in bounds
+      self.x = math.min(math.max(self.radius, self.x), GAME_WIDTH - self.radius)
+      self.y = math.min(math.max(self.radius, self.y), GAME_HEIGHT - self.radius)
+      -- Figure out what the player is aiming at
+      local aimX, aimY, aimMagnitude = controller:getAimDirection(self.x + GAME_X, self.y + GAME_Y)
+      if aimMagnitude >= 0.0 then
+        self.aimX = aimX
+        self.aimY = aimY
+      elseif moveMagnitude >= 0.0 then
+        self.aimX = moveX
+        self.aimY = moveY
+      end
+      if self.isAiming then
+        self.targetX = self.x + 999 * self.aimX
+        self.targetY = self.y + 999 * self.aimY
+      else
+        self.targetX = nil
+        self.targetY = nil
+      end
+    end,
+    draw = function(self)
+      love.graphics.setColor(COLOR.LIGHT_GREY)
+      love.graphics.circle('fill', self.x, self.y, self.radius)
+      if self.isAiming then
+        love.graphics.setColor(COLOR.LIGHT_GREY)
+        drawPixelatedLine(self.x, self.y, self.targetX, self.targetY)
+      end
+    end,
+    getController = function(self)
+      return playerControllers[self.playerNum] or blankController
+    end
+  }
+}
 
 function love.load()
   -- Set default filter to nearest to allow crisp pixel art
   love.graphics.setDefaultFilter('nearest', 'nearest')
   -- Load assets
   spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
+  -- Create controllers
+  blankController = Controllers.BlankController:new()
+  mouseAndKeyboardController = Controllers.MouseAndKeyboardController:new()
+  joystickControllers = {}
+  playerControllers = { mouseAndKeyboardController, nil }
   -- Spawn entities
+  entities = {}
+  newEntities = {}
+  spawnEntity('player', {
+    playerNum = 1,
+    x = 50,
+    y = 50
+  })
+  spawnEntity('player', {
+    playerNum = 2,
+    x = 100,
+    y = 50
+  })
   addNewEntitiesToGame()
 end
 
@@ -38,28 +149,76 @@ function love.update(dt)
   addNewEntitiesToGame()
   -- Remove dead entities from the game
   removeDeadEntitiesFromGame()
+  -- Update controllers
+  mouseAndKeyboardController:update(dt)
+  for i = #joystickControllers, 1, -1 do
+    local controller = joystickControllers[i]
+    if not controller:isActive() then
+      table.remove(joystickControllers, i)
+    else
+      controller:update(dt)
+    end
+  end
+  -- Try switching controllers after controller disconnects
+  if playerControllers[1] and not playerControllers[1]:isActive() then
+    if playerControllers[2] == mouseAndKeyboardController then
+      playerControllers[2] = nil
+    end
+    playerControllers[1] = mouseAndKeyboardController
+  end
+  if playerControllers[2] and not playerControllers[2]:isActive() then
+    if playerControllers[1] == mouseAndKeyboardController then
+      playerControllers[2] = nil
+    else
+      playerControllers[2] = mouseAndKeyboardController
+    end
+  end
 end
 
 function love.draw()
   -- Clear the screen
-  love.graphics.clear(COLORS.WHITE)
+  love.graphics.clear(COLOR.WHITE)
+  -- Draw the background
+  drawSprite(0, 0, 300, 163, 5, 30)
   -- Draw the game
   love.graphics.push()
-  love.graphics.translate(GAME_OFFSET_X, GAME_OFFSET_Y)
-  love.graphics.setScissor(GAME_OFFSET_X, GAME_OFFSET_Y, GAME_WIDTH, GAME_HEIGHT)
+  love.graphics.translate(GAME_X, GAME_Y)
+  love.graphics.setScissor(GAME_X, GAME_Y, GAME_WIDTH, GAME_HEIGHT)
+  -- Draw a border around the game area
+  love.graphics.setColor(1, 0, 0)
+  love.graphics.rectangle('line', 0, 0, GAME_WIDTH, GAME_HEIGHT)
   -- Draw entities
   for _, entity in ipairs(entities) do
-    love.graphics.setColor(COLORS.PURE_WHITE)
+    love.graphics.setColor(COLOR.PURE_WHITE)
     entity:draw()
   end
   love.graphics.pop()
 end
 
-function love.mousepressed(...) end
-function love.keypressed(...) end
-function love.joystickadded(joystick) end
-function love.joystickpressed(...) end
-function love.joystickreleased(...) end
+-- Assign controllers as they're added
+function love.joystickadded(joystick)
+  local controller = Controllers.JoystickController:new(joystick)
+  table.insert(joystickControllers, controller)
+  if not playerControllers[1] or playerControllers[1] == mouseAndKeyboardController then
+    playerControllers[1] = controller
+    playerControllers[2] = mouseAndKeyboardController
+  elseif not playerControllers[2] or playerControllers[2] == mouseAndKeyboardController then
+    playerControllers[2] = controller
+  end
+end
+
+-- Pass input callbacks to the controllers
+function love.joystickpressed(...)
+  for _, controller in ipairs(joystickControllers) do
+    controller:joystickpressed(...)
+  end
+end
+function love.mousepressed(...)
+  mouseAndKeyboardController:mousepressed(...)
+end
+function love.keypressed(...)
+  mouseAndKeyboardController:keypressed(...)
+end
 
 -- Spawns a new game entity
 function spawnEntity(className, params)
@@ -69,9 +228,9 @@ function spawnEntity(className, params)
     isAlive = true,
     framesAlive = 0,
     timeAlive = 0.00,
+    radius = 5,
     x = 0,
     y = 0,
-    radius = 10,
     vx = 0,
     vy = 0,
     isStationary = false,
@@ -84,7 +243,7 @@ function spawnEntity(className, params)
       self.y = self.y + self.vy * dt
     end,
     draw = function(self)
-      love.graphics.setColor(COLORS.DARK_GREY)
+      love.graphics.setColor(COLOR.LIGHT_GREY)
       love.graphics.circle('fill', self.x, self.y, self.radius)
     end,
     addToGame = function(self)
