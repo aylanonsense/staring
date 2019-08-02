@@ -3,8 +3,10 @@ local Controllers = require('src/Controller.lua')
 -- Constants
 local COLOR = {
   LIGHT_GREY = { 205 / 255, 205 / 255, 205 / 255 }, -- #cdcdcd
+  DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
   WHITE = { 243 / 255, 241 / 255, 241 / 255 }, -- #f3f1f1
-  PURE_WHITE = { 1, 1, 1 } -- #ffffff
+  PURE_WHITE = { 1, 1, 1 }, -- #ffffff
+  DEBUG_GREEN = { 0, 1, 0 } -- #00ff00
 }
 local GAME_X = 27
 local GAME_Y = 65
@@ -163,14 +165,25 @@ local ENTITY_CLASSES = {
     end
   },
   baddie = {
+    radius = 7,
     eyeX = -999,
     eyeY = -999,
     eyeRadius = 5,
     groups = { obstacles },
     isPushable = false,
     update = function(self, dt)
+      -- Update eye position
       self.eyeX = self.x
       self.eyeY = self.y - 3
+    end,
+    draw = function(self)
+      -- Draw body
+      drawSprite(0, 172, 21, 36, self.x - 10.5, self.y - 26)
+      -- Draw eye
+      drawSprite(0, 209, 10, 5, self.eyeX - 5, self.eyeY - 2.5)
+      -- love.graphics.setColor(COLOR.DEBUG_GREEN)
+      -- love.graphics.circle('line', self.x, self.y, self.radius)
+      -- love.graphics.circle('line', self.eyeX, self.eyeY, self.eyeRadius)
     end
   }
 }
