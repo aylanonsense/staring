@@ -185,58 +185,80 @@ local ENTITY_CLASSES = {
     pupilOffsetX = 0,
     pupilOffsetY = 0,
     timeUntilPupilUpdate = 0.00,
+    timeUntilBlink = 0.00,
+    blinkFrames = 0,
     isPushable = false,
     update = function(self, dt)
-      -- Figure out which player is closest
+      -- Figure out which player is closest, giving priority to players staring at the baddie
       local closestPlayer
       local closestPlayerSquareDist
+      local closestPlayerIsTargeting = false
       for _, player in ipairs(players) do
         local dx = player.x - self.x
         local dy = player.y - self.y
         local squareDist = dx * dx + dy * dy
-        if not closestPlayer or squareDist < closestPlayerSquareDist then
+        if not closestPlayer or squareDist < closestPlayerSquareDist or (not closestPlayerIsTargeting and player.target == self) then
           closestPlayer = player
           closestPlayerSquareDist = squareDist
+          closestPlayerIsTargeting = player.target == self
         end
       end
       -- Update eye
-      if closestPlayer then
-        local eyeX, eyeY = self:getEyePosition()
-        local playerEyeX, playerEyeY = closestPlayer:getEyePosition()
-        local dx = playerEyeX - eyeX
-        local dy = playerEyeY - eyeY
-        local dist = math.sqrt(dx * dx + dy * dy)
-        local angle = math.atan2(dy, dx)
-        local distMult = math.min(1.0, 0.35 + dist / 200)
-        -- Update eye white offset
-        self.timeUntilEyeWhiteUpdate = self.timeUntilEyeWhiteUpdate - dt
-        if self.timeUntilEyeWhiteUpdate <= 0.00 then
-          self.timeUntilEyeWhiteUpdate = 0.3 + 0.2 * math.random()
-          local eyeWhiteDist = distMult * 2.0
-          self.eyeWhiteOffsetX = eyeWhiteDist * math.cos(angle)
-          self.eyeWhiteOffsetY = eyeWhiteDist * math.sin(angle)
+      local eyeUpdateMult = 1.0
+      local eyeWhiteJitterMult = 0.0
+      local pupilJitterMult = 1.0
+      if closestPlayerIsTargeting then
+        eyeUpdateMult = 5.0
+        eyeWhiteJitterMult = 1.0
+        pupilJitterMult = 3.5
+      end
+      local eyeX, eyeY = self:getEyePosition()
+      local playerEyeX, playerEyeY = closestPlayer:getEyePosition()
+      local dx = playerEyeX - eyeX
+      local dy = playerEyeY - eyeY
+      local dist = math.sqrt(dx * dx + dy * dy)
+      local angle = math.atan2(dy, dx)
+      local distMult = math.min(1.0, 0.35 + dist / 200)
+      -- Update eye white offset
+      self.timeUntilEyeWhiteUpdate = self.timeUntilEyeWhiteUpdate - eyeUpdateMult * dt
+      if self.timeUntilEyeWhiteUpdate <= 0.00 then
+        self.timeUntilEyeWhiteUpdate = 0.3 + 0.2 * math.random()
+        local eyeWhiteDist = distMult * 2.0
+        self.eyeWhiteOffsetX = eyeWhiteDist * math.cos(angle) + eyeWhiteJitterMult * (0.5 * math.random() - 0.25)
+        self.eyeWhiteOffsetY = eyeWhiteDist * math.sin(angle) + eyeWhiteJitterMult * (0.5 * math.random() - 0.25)
+      end
+      -- Update pupil offset
+      self.timeUntilPupilUpdate = self.timeUntilPupilUpdate - eyeUpdateMult * dt
+      if self.timeUntilPupilUpdate <= 0.00 then
+        self.timeUntilPupilUpdate = 0.1 + 0.2 * math.random()
+        local angleMult = ((2 * angle / math.pi) + 1) % 2
+        if angleMult > 1 then
+          angleMult = 2 - angleMult
         end
-        -- Update pupil offset
-        self.timeUntilPupilUpdate = self.timeUntilPupilUpdate - dt
-        if self.timeUntilPupilUpdate <= 0.00 then
-          self.timeUntilPupilUpdate = 0.1 + 0.2 * math.random()
-          local angleMult = ((2 * angle / math.pi) + 1) % 2
-          if angleMult > 1 then
-            angleMult = 2 - angleMult
-          end
-          angleMult = math.max(0.2, angleMult)
-          local pupilDist = distMult * (1.3 + 1.9 * angleMult)
-          self.pupilOffsetX = pupilDist * math.cos(angle) + 0.5 * math.random() - 0.25
-          self.pupilOffsetY = pupilDist * math.sin(angle) + 0.5 * math.random() - 0.25
-        end
+        angleMult = math.max(0.2, angleMult)
+        local pupilDist = distMult * (1.5 + 1.3 * angleMult)
+        self.pupilOffsetX = pupilDist * math.cos(angle) + pupilJitterMult * (0.5 * math.random() - 0.25)
+        self.pupilOffsetY = pupilDist * math.sin(angle) + pupilJitterMult * (0.5 * math.random() - 0.25)
+      end
+      -- Blink every so often
+      self.blinkFrames = self.blinkFrames - 1
+      self.timeUntilBlink = self.timeUntilBlink - dt
+      if self.timeUntilBlink <= 0.00 then
+        self.timeUntilBlink = 2.00 + 5.00 * math.random()
+        self.blinkFrames = 11
       end
     end,
     draw = function(self)
       -- Draw body
       drawSprite(0, 172, 21, 36, self.x - 10.5, self.y - 26)
       -- Draw eye white
+      local eyeFrame = 3
+      if self.blinkFrames > 0 then
+        -- local b = math.abs(math.ceil(self.blinkFrames / 2) - 3) -- 2 to 0 to 2
+        eyeFrame = 6 - math.abs(math.ceil(self.blinkFrames / 2) - 3)
+      end
       local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
-      drawSprite(0, 209, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3.5)
+      drawSprite(11 * (eyeFrame - 1), 209, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3.5)
       -- Draw pupil
       local pupilX, pupilY = self:getPupilPosition()
       love.graphics.setColor(COLOR.DARK_GREY)
@@ -287,6 +309,14 @@ function love.load()
   spawnEntity('baddie', {
     x = 200,
     y = 75
+  })
+  spawnEntity('baddie', {
+    x = 0,
+    y = 0
+  })
+  spawnEntity('baddie', {
+    x = 0,
+    y = 100
   })
   addNewEntitiesToGame()
 end
