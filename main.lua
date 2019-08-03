@@ -6,6 +6,8 @@ local COLOR = {
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
   WHITE = { 243 / 255, 241 / 255, 241 / 255 }, -- #f3f1f1
   RED = { 239 / 255, 34 / 255, 9 / 255 }, -- #ef2209
+  PURPLE = { 179 / 255, 92 / 255, 222 / 255 }, -- #b35cde
+  GREEN = { 101 / 255, 156 / 255, 68 / 255 }, -- #659c44
   PURE_WHITE = { 1, 1, 1 }, -- #ffffff
   DEBUG_GREEN = { 0, 1, 0 } -- #00ff00
 }
@@ -51,6 +53,7 @@ local ENTITY_CLASSES = {
     facingY = 0.0,
     aimX = 1.0,
     aimY = 0.0,
+    aimAngle = 0,
     isDashing = false,
     dashDuration = 0.00,
     dashCooldown = 0.00,
@@ -58,6 +61,10 @@ local ENTITY_CLASSES = {
     target = nil,
     targetX = nil,
     targetY = nil,
+    eyeWhiteOffsetX = 0,
+    eyeWhiteOffsetY = 0,
+    pupilOffsetX = 0,
+    pupilOffsetY = 0,
     update = function(self, dt)
       local controller = self:getController()
       -- Calculate player facing
@@ -105,10 +112,10 @@ local ENTITY_CLASSES = {
       self.y = math.min(math.max(self.radius, self.y), GAME_HEIGHT - self.radius)
       -- Figure out what the player is aiming at
       local aimX, aimY, aimMagnitude = controller:getAimDirection(self.x + GAME_X, self.y + GAME_Y)
-      if aimMagnitude >= 0.0 then
+      if aimMagnitude > 0.0 and self.isAiming then
         self.aimX = aimX
         self.aimY = aimY
-      elseif moveMagnitude >= 0.0 then
+      elseif moveMagnitude > 0.0 then
         self.aimX = moveX
         self.aimY = moveY
       end
@@ -158,13 +165,41 @@ local ENTITY_CLASSES = {
           self.targetY = GAME_HEIGHT + LASER_MARGIN.BOTTOM
         end
       end
+      -- Update eye
+      if not self.isAiming then
+        self.eyeWhiteOffsetX = self.aimX
+        self.eyeWhiteOffsetY = self.aimY
+      end
+      self.pupilOffsetX = self.aimX
+      self.pupilOffsetY = self.aimY
     end,
-    draw = function(self)
-      love.graphics.setColor(COLOR.LIGHT_GREY)
-      love.graphics.circle('fill', self.x, self.y, self.radius)
-      if self.isAiming then
-        love.graphics.setColor(COLOR.LIGHT_GREY)
-        drawPixelatedLine(self.x, self.y, self.targetX, self.targetY)
+    draw = function(self, renderLayer)
+      if renderLayer == 1 then
+        -- Draw shadow
+        local shadowSprite = 5
+        drawSprite(100 + 20 * (shadowSprite - 1), 173, 19, 7, self.x - 9.5, self.y + 1)
+      elseif renderLayer == 3 then
+        -- Draw body
+        love.graphics.setColor(COLOR.PURE_WHITE)
+        drawSprite(1, self.color == COLOR.PURPLE and 329 or 348, 23, 18, self.x - 12.5, self.y - 9)
+        -- love.graphics.setColor(COLOR.DEBUG_GREEN)
+        -- love.graphics.circle('line', self.x, self.y, self.radius)
+      elseif renderLayer == 4 then
+        -- Draw laser
+        if self.isAiming then
+          local pupilX, pupilY = self:getPupilPosition()
+          love.graphics.setColor(self.color)
+          drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY)
+        end
+      elseif renderLayer == 5 then
+        -- Draw eye
+        love.graphics.setColor(COLOR.PURE_WHITE)
+        local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
+        local eyeFrame = 3
+        drawSprite(56 + 11 * (eyeFrame - 1), 173, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3)
+        local pupilX, pupilY = self:getPupilPosition()
+        love.graphics.setColor(self.color)
+        love.graphics.rectangle('fill', pupilX - 0.5, pupilY - 0.5, 1, 1)
       end
     end,
     getController = function(self)
@@ -172,6 +207,14 @@ local ENTITY_CLASSES = {
     end,
     getEyePosition = function(self)
       return self.x, self.y
+    end,
+    getEyeWhitePosition = function(self)
+      local x, y = self:getEyePosition()
+      return x + self.eyeWhiteOffsetX, y + self.eyeWhiteOffsetY
+    end,
+    getPupilPosition = function(self)
+      local x, y = self:getEyeWhitePosition()
+      return x + self.pupilOffsetX, y + self.pupilOffsetY
     end
   },
   baddie = {
@@ -297,47 +340,53 @@ local ENTITY_CLASSES = {
         end
       end
     end,
-    draw = function(self)
-      local pupilX, pupilY = self:getPupilPosition()
-      local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
-      -- Draw body
-      local bodyFrame = 3
-      drawSprite(24 * (bodyFrame - 1), 172, 23, 36, self.x - 11.5, self.y - 26)
-      -- Draw eye white
-      local eyeFrame = 3
-      if self.blinkFrames > 0 then
-        -- local b = math.abs(math.ceil(self.blinkFrames / 2) - 3) -- 2 to 0 to 2
-        eyeFrame = 6 - math.abs(math.ceil(self.blinkFrames / 2) - 3)
-      end
-      drawSprite(11 * (eyeFrame - 1), 209, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3.5)
-      -- Draw pupil
-      local pupilColor
-      local pupilSize
-      if self.attackStage and self.attackStage ~= 'pausing' then
-        pupilColor = COLOR.RED
-        pupilSize = 1.5
-      else
-        pupilColor = COLOR.DARK_GREY
-        pupilSize = 1
-      end
-      love.graphics.setColor(pupilColor)
-      love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
-      -- love.graphics.setColor(COLOR.DEBUG_GREEN)
-      -- love.graphics.circle('line', self.x, self.y, self.radius)
-      -- local eyeX, eyeY = self:getEyePosition()
-      -- love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
-    end,
-    drawForeground = function(self)
-      -- Draw laser
-      local pupilX, pupilY = self:getPupilPosition()
-      if self.attackStage and self.targetX and self.targetY then
-        love.graphics.setColor(COLOR.RED)
-        if self.attackStage == 'aiming' then
-          drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1, 4, 4)
-        elseif (self.attackStage == 'charging' and self.attackStageFrames % 6 < 2) or self.attackStage == 'cooldown' then
-          drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1)
-        elseif self.attackStage == 'shooting' then
-          drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 2)
+    draw = function(self, renderLayer)
+      if renderLayer == 1 then
+        -- Draw shadow
+        local shadowSprite = 5
+        drawSprite(100 + 20 * (shadowSprite - 1), 173, 19, 7, self.x - 9.5, self.y + 0)
+      elseif renderLayer == 3 then
+        -- Draw body
+        local bodyFrame = 3
+        drawSprite(24 * (bodyFrame - 1) + 1, 181, 23, 36, self.x - 11.5, self.y - 26)
+      elseif renderLayer == 4 then
+        local pupilX, pupilY = self:getPupilPosition()
+        local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
+        -- Draw eye white
+        local eyeFrame = 3
+        if self.blinkFrames > 0 then
+          -- local b = math.abs(math.ceil(self.blinkFrames / 2) - 3) -- 2 to 0 to 2
+          eyeFrame = 6 - math.abs(math.ceil(self.blinkFrames / 2) - 3)
+        end
+        drawSprite(11 * (eyeFrame - 1) + 1, 173, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3.5)
+        -- Draw pupil
+        local pupilColor
+        local pupilSize
+        if self.attackStage and self.attackStage ~= 'pausing' then
+          pupilColor = COLOR.RED
+          pupilSize = 1.5
+        else
+          pupilColor = COLOR.DARK_GREY
+          pupilSize = 1
+        end
+        love.graphics.setColor(pupilColor)
+        love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
+        -- love.graphics.setColor(COLOR.DEBUG_GREEN)
+        -- love.graphics.circle('line', self.x, self.y, self.radius)
+        -- local eyeX, eyeY = self:getEyePosition()
+        -- love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
+      elseif renderLayer == 5 then
+        -- Draw laser
+        local pupilX, pupilY = self:getPupilPosition()
+        if self.attackStage and self.targetX and self.targetY then
+          love.graphics.setColor(COLOR.RED)
+          if self.attackStage == 'aiming' then
+            drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1, 4, 4)
+          elseif (self.attackStage == 'charging' and self.attackStageFrames % 6 < 2) or self.attackStage == 'cooldown' then
+            drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1)
+          elseif self.attackStage == 'shooting' then
+            drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 2)
+          end
         end
       end
     end,
@@ -446,11 +495,13 @@ function love.load()
   newEntities = {}
   spawnEntity('player', {
     playerNum = 1,
+    color = COLOR.PURPLE,
     x = 150,
     y = 50
   })
   spawnEntity('player', {
     playerNum = 2,
+    color = COLOR.GREEN,
     x = 100,
     y = 50
   })
@@ -511,22 +562,18 @@ function love.draw()
   -- Clear the screen
   love.graphics.clear(COLOR.WHITE)
   -- Draw the background
-  drawSprite(0, 0, 300, 163, 5, 21)
+  drawSprite(1, 1, 300, 163, 5, 21)
   -- Draw the game
   love.graphics.push()
   love.graphics.translate(GAME_X, GAME_Y)
   -- Draw entities
-  for _, entity in ipairs(entities) do
-    love.graphics.setColor(COLOR.PURE_WHITE)
-    entity:drawBackground()
-  end
-  for _, entity in ipairs(entities) do
-    love.graphics.setColor(COLOR.PURE_WHITE)
-    entity:draw()
-  end
-  for _, entity in ipairs(entities) do
-    love.graphics.setColor(COLOR.PURE_WHITE)
-    entity:drawForeground()
+  for renderLayer = 1, 6 do
+    for _, entity in ipairs(entities) do
+      if not entity.renderLayer or entity.renderLayer == renderLayer then
+        love.graphics.setColor(COLOR.PURE_WHITE)
+        entity:draw(renderLayer)
+      end
+    end
   end
   love.graphics.pop()
 end
@@ -578,12 +625,10 @@ function spawnEntity(className, params)
       self.x = self.x + self.vx * dt
       self.y = self.y + self.vy * dt
     end,
-    drawBackground = function(self) end,
-    draw = function(self)
+    draw = function(self, renderLayer)
       love.graphics.setColor(COLOR.LIGHT_GREY)
       love.graphics.circle('fill', self.x, self.y, self.radius)
     end,
-    drawForeground = function(self) end,
     addToGame = function(self)
       table.insert(entities, self)
       if self.groups then
