@@ -5,6 +5,7 @@ local COLOR = {
   LIGHT_GREY = { 205 / 255, 205 / 255, 205 / 255 }, -- #cdcdcd
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
   WHITE = { 243 / 255, 241 / 255, 241 / 255 }, -- #f3f1f1
+  RED = { 239 / 255, 34 / 255, 9 / 255 }, -- #ef2209
   PURE_WHITE = { 1, 1, 1 }, -- #ffffff
   DEBUG_GREEN = { 0, 1, 0 } -- #00ff00
 }
@@ -188,81 +189,90 @@ local ENTITY_CLASSES = {
     timeUntilBlink = 0.00,
     blinkFrames = 0,
     isPushable = false,
+    isBeingTargeted = false,
+    attackStage = nil,
+    targetX = nil,
+    targetY = nil,
     update = function(self, dt)
       -- Figure out which player is closest, giving priority to players staring at the baddie
-      local closestPlayer
-      local closestPlayerSquareDist
-      local closestPlayerIsTargeting = false
-      for _, player in ipairs(players) do
-        local dx = player.x - self.x
-        local dy = player.y - self.y
-        local squareDist = dx * dx + dy * dy
-        if not closestPlayer or squareDist < closestPlayerSquareDist or (not closestPlayerIsTargeting and player.target == self) then
-          closestPlayer = player
-          closestPlayerSquareDist = squareDist
-          closestPlayerIsTargeting = player.target == self
-        end
-      end
+      local closestPlayer = self:getClosestPlayer()
+      self.isBeingTargeted = closestPlayer.target == self
       -- Update eye
       local eyeUpdateMult = 1.0
       local eyeWhiteJitterMult = 0.0
       local pupilJitterMult = 1.0
-      if closestPlayerIsTargeting then
+      if self.isBeingTargeted then
         eyeUpdateMult = 5.0
         eyeWhiteJitterMult = 1.0
         pupilJitterMult = 3.5
       end
-      local eyeX, eyeY = self:getEyePosition()
-      local playerEyeX, playerEyeY = closestPlayer:getEyePosition()
-      local dx = playerEyeX - eyeX
-      local dy = playerEyeY - eyeY
-      local dist = math.sqrt(dx * dx + dy * dy)
-      local angle = math.atan2(dy, dx)
-      local distMult = math.min(1.0, 0.35 + dist / 200)
-      -- Update eye white offset
-      self.timeUntilEyeWhiteUpdate = self.timeUntilEyeWhiteUpdate - eyeUpdateMult * dt
-      if self.timeUntilEyeWhiteUpdate <= 0.00 then
-        self.timeUntilEyeWhiteUpdate = 0.3 + 0.2 * math.random()
-        local eyeWhiteDist = distMult * 2.0
-        self.eyeWhiteOffsetX = eyeWhiteDist * math.cos(angle) + eyeWhiteJitterMult * (0.5 * math.random() - 0.25)
-        self.eyeWhiteOffsetY = eyeWhiteDist * math.sin(angle) + eyeWhiteJitterMult * (0.5 * math.random() - 0.25)
-      end
-      -- Update pupil offset
-      self.timeUntilPupilUpdate = self.timeUntilPupilUpdate - eyeUpdateMult * dt
-      if self.timeUntilPupilUpdate <= 0.00 then
-        self.timeUntilPupilUpdate = 0.1 + 0.2 * math.random()
-        local angleMult = ((2 * angle / math.pi) + 1) % 2
-        if angleMult > 1 then
-          angleMult = 2 - angleMult
+      if not self.attackStage then
+        local eyeX, eyeY = self:getEyePosition()
+        local playerEyeX, playerEyeY = closestPlayer:getEyePosition()
+        local dx = playerEyeX - eyeX
+        local dy = playerEyeY - eyeY
+        local dist = math.sqrt(dx * dx + dy * dy)
+        local angle = math.atan2(dy, dx)
+        local distMult = math.min(1.0, 0.35 + dist / 200)
+        -- Update eye white offset
+        self.timeUntilEyeWhiteUpdate = self.timeUntilEyeWhiteUpdate - eyeUpdateMult * dt
+        if self.timeUntilEyeWhiteUpdate <= 0.00 then
+          self.timeUntilEyeWhiteUpdate = 0.3 + 0.2 * math.random()
+          local eyeWhiteDist = distMult * 2.0
+          self.eyeWhiteOffsetX = eyeWhiteDist * math.cos(angle) + eyeWhiteJitterMult * (0.5 * math.random() - 0.25)
+          self.eyeWhiteOffsetY = eyeWhiteDist * math.sin(angle) + eyeWhiteJitterMult * (0.5 * math.random() - 0.25)
         end
-        angleMult = math.max(0.2, angleMult)
-        local pupilDist = distMult * (1.5 + 1.3 * angleMult)
-        self.pupilOffsetX = pupilDist * math.cos(angle) + pupilJitterMult * (0.5 * math.random() - 0.25)
-        self.pupilOffsetY = pupilDist * math.sin(angle) + pupilJitterMult * (0.5 * math.random() - 0.25)
-      end
-      -- Blink every so often
-      self.blinkFrames = self.blinkFrames - 1
-      self.timeUntilBlink = self.timeUntilBlink - dt
-      if self.timeUntilBlink <= 0.00 then
-        self.timeUntilBlink = 2.00 + 5.00 * math.random()
-        self.blinkFrames = 11
+        -- Update pupil offset
+        self.timeUntilPupilUpdate = self.timeUntilPupilUpdate - eyeUpdateMult * dt
+        if self.timeUntilPupilUpdate <= 0.00 then
+          self.timeUntilPupilUpdate = 0.1 + 0.2 * math.random()
+          local angleMult = ((2 * angle / math.pi) + 1) % 2
+          if angleMult > 1 then
+            angleMult = 2 - angleMult
+          end
+          angleMult = math.max(0.2, angleMult)
+          local pupilDist = distMult * (1.5 + 1.3 * angleMult)
+          self.pupilOffsetX = pupilDist * math.cos(angle) + pupilJitterMult * (0.5 * math.random() - 0.25)
+          self.pupilOffsetY = pupilDist * math.sin(angle) + pupilJitterMult * (0.5 * math.random() - 0.25)
+        end
+        -- Blink every so often
+        self.blinkFrames = self.blinkFrames - 1
+        self.timeUntilBlink = self.timeUntilBlink - dt
+        if self.timeUntilBlink <= 0.00 then
+          self.timeUntilBlink = 2.00 + 5.00 * math.random()
+          self.blinkFrames = 11
+        end
       end
     end,
     draw = function(self)
+      local pupilX, pupilY = self:getPupilPosition()
+      local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
       -- Draw body
-      drawSprite(0, 172, 21, 36, self.x - 10.5, self.y - 26)
+      drawSprite(0, 172, 23, 36, self.x - 11.5, self.y - 26)
       -- Draw eye white
       local eyeFrame = 3
       if self.blinkFrames > 0 then
         -- local b = math.abs(math.ceil(self.blinkFrames / 2) - 3) -- 2 to 0 to 2
         eyeFrame = 6 - math.abs(math.ceil(self.blinkFrames / 2) - 3)
       end
-      local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
       drawSprite(11 * (eyeFrame - 1), 209, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3.5)
       -- Draw pupil
-      local pupilX, pupilY = self:getPupilPosition()
-      love.graphics.setColor(COLOR.DARK_GREY)
-      love.graphics.rectangle('fill', pupilX - 0.5, pupilY - 0.5, 1, 1)
+      local pupilColor
+      local pupilSize
+      if self.attackStage then
+        pupilColor = COLOR.RED
+        pupilSize = 1.5
+      else
+        pupilColor = COLOR.DARK_GREY
+        pupilSize = 1
+      end
+      love.graphics.setColor(pupilColor)
+      love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
+      -- Draw laser
+      if self.targetX and self.targetY then
+        love.graphics.setColor(COLOR.RED)
+        drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1, 4, 4)
+      end
       -- love.graphics.setColor(COLOR.DEBUG_GREEN)
       -- love.graphics.circle('line', self.x, self.y, self.radius)
       -- local eyeX, eyeY = self:getEyePosition()
@@ -279,6 +289,74 @@ local ENTITY_CLASSES = {
     getPupilPosition = function(self)
       local x, y = self:getEyeWhitePosition()
       return x + self.pupilOffsetX, y + self.pupilOffsetY
+    end,
+    getClosestPlayer = function(self)
+      local closestPlayer
+      local closestPlayerSquareDist
+      local closestPlayerIsTargeting = false
+      for _, player in ipairs(players) do
+        local dx = player.x - self.x
+        local dy = player.y - self.y
+        local squareDist = dx * dx + dy * dy
+        if (not closestPlayer or squareDist < closestPlayerSquareDist) and (player.target == self or not closestPlayerIsTargeting) then
+          closestPlayer = player
+          closestPlayerSquareDist = squareDist
+          closestPlayerIsTargeting = player.target == self
+        end
+      end
+      return closestPlayer
+    end,
+    attack = function(self, angleOrX, y)
+      self.timeUntilBlink = 0.50
+      self.blinkFrames = 0
+      self.attackStage = 'aiming'
+      local angle
+      local pupilX, pupilY = self:getPupilPosition()
+      if angleOrX and y then
+        local dx = angleOrX - pupilX
+        local dy = y - pupilY
+        angle = math.atan2(dy, dx)
+      elseif angleOrX and not y then
+        angle = angleOrX
+      else
+        local target = self:getClosestPlayer()
+        local dx = target.x - pupilX
+        local dy = target.y - pupilY
+        angle = math.atan2(dy, dx)
+      end
+      local aimX = math.cos(angle)
+      local aimY = math.sin(angle)
+      -- Figure out where the laser ends
+      self.targetX = pupilX + 999 * aimX
+      self.targetY = pupilY + 999 * aimY
+      -- Keep target in bounds
+      if self.targetX < -LASER_MARGIN.SIDE then
+        self.targetX = -LASER_MARGIN.SIDE
+        self.targetY = pupilY + aimY / aimX * (-LASER_MARGIN.SIDE - pupilX)
+      end
+      if self.targetX > GAME_WIDTH + LASER_MARGIN.SIDE then
+        self.targetX = GAME_WIDTH + LASER_MARGIN.SIDE
+        self.targetY = pupilY + aimY / aimX * (GAME_WIDTH + LASER_MARGIN.SIDE - pupilX)
+      end
+      if self.targetY < -LASER_MARGIN.TOP then
+        self.targetX = pupilX + aimX / aimY * (-LASER_MARGIN.TOP - pupilY)
+        self.targetY = -LASER_MARGIN.TOP
+      end
+      if self.targetY > GAME_HEIGHT + LASER_MARGIN.BOTTOM then
+        self.targetX = pupilX + aimX / aimY * (GAME_HEIGHT + LASER_MARGIN.BOTTOM - pupilY)
+        self.targetY = GAME_HEIGHT + LASER_MARGIN.BOTTOM
+      end
+      -- Update eye position
+      self.eyeWhiteOffsetX = 0.5 * math.cos(angle)
+      self.eyeWhiteOffsetY = 0.5 * math.sin(angle)
+      local angleMult = ((2 * angle / math.pi) + 1) % 2
+      if angleMult > 1 then
+        angleMult = 2 - angleMult
+      end
+      angleMult = math.max(0.2, angleMult)
+      local pupilDist = 0.75 * (1.5 + 1.3 * angleMult)
+      self.pupilOffsetX = pupilDist * math.cos(angle)
+      self.pupilOffsetY = pupilDist * math.sin(angle)
     end
   }
 }
@@ -306,7 +384,7 @@ function love.load()
     x = 100,
     y = 50
   })
-  spawnEntity('baddie', {
+  local baddie = spawnEntity('baddie', {
     x = 200,
     y = 75
   })
@@ -319,6 +397,7 @@ function love.load()
     y = 100
   })
   addNewEntitiesToGame()
+  baddie:attack()
 end
 
 function love.update(dt)
