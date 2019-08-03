@@ -179,7 +179,7 @@ local ENTITY_CLASSES = {
     radius = 7,
     eyeRadius = 5,
     eyeOffsetX = 0,
-    eyeOffsetY = -15,
+    eyeOffsetY = -20,
     eyeWhiteOffsetX = 0,
     eyeWhiteOffsetY = 0,
     timeUntilEyeWhiteUpdate = 0.00,
@@ -211,8 +211,11 @@ local ENTITY_CLASSES = {
             self.timeUntilNextAttackStage = 2.00
           elseif self.attackStage == 'shooting' then
             self.attackStage = 'cooldown'
-            self.timeUntilNextAttackStage = 0.75
+            self.timeUntilNextAttackStage = 0.10
           elseif self.attackStage == 'cooldown' then
+            self.attackStage = 'pausing'
+            self.timeUntilNextAttackStage = 0.75
+          elseif self.attackStage == 'pausing' then
             self.attackStage = nil
           end
         end
@@ -227,8 +230,8 @@ local ENTITY_CLASSES = {
         eyeWhiteJitterMult = 1.0
         pupilJitterMult = 1.0
       elseif self.attackStage then
-        eyeWhiteJitterMult = 0.0
-        pupilJitterMult = 0.0
+        eyeWhiteJitterMult = 0.25
+        pupilJitterMult = 0.25
       else
         eyeWhiteJitterMult = 0.0
         pupilJitterMult = 0.3
@@ -247,9 +250,12 @@ local ENTITY_CLASSES = {
           self:setEyeWhiteAngle(self.attackAngle, 0.3)
           self:setPupilAngle(self.attackAngle, 0.5)
         elseif self.attackStage == 'shooting' then
-          self:setEyeWhiteAngle(self.attackAngle, 1.0)
+          self:setEyeWhiteAngle(self.attackAngle, 0.9)
           self:setPupilAngle(self.attackAngle, 0.7)
         elseif self.attackStage == 'cooldown' then
+          self:setEyeWhiteAngle(self.attackAngle, 0.7)
+          self:setPupilAngle(self.attackAngle, 0.6)
+        elseif self.attackStage == 'pausing' then
           self:setEyeWhiteAngle(self.attackAngle, 0.4)
           self:setPupilAngle(self.attackAngle, 0.4)
         end
@@ -257,6 +263,7 @@ local ENTITY_CLASSES = {
         self.eyeWhiteOffsetY = self.eyeWhiteOffsetY + eyeWhiteJitterY
         self.pupilOffsetX = self.pupilOffsetX + pupilJitterX
         self.pupilOffsetY = self.pupilOffsetY + pupilJitterY
+        self:calculateTarget()
       elseif not self.attackStage then
         local eyeX, eyeY = self:getEyePosition()
         local playerEyeX, playerEyeY = closestPlayer:getEyePosition()
@@ -294,7 +301,8 @@ local ENTITY_CLASSES = {
       local pupilX, pupilY = self:getPupilPosition()
       local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
       -- Draw body
-      drawSprite(0, 172, 23, 36, self.x - 11.5, self.y - 26)
+      local bodyFrame = 3
+      drawSprite(24 * (bodyFrame - 1), 172, 23, 36, self.x - 11.5, self.y - 26)
       -- Draw eye white
       local eyeFrame = 3
       if self.blinkFrames > 0 then
@@ -305,7 +313,7 @@ local ENTITY_CLASSES = {
       -- Draw pupil
       local pupilColor
       local pupilSize
-      if self.attackStage and self.attackStage ~= 'cooldown' then
+      if self.attackStage and self.attackStage ~= 'pausing' then
         pupilColor = COLOR.RED
         pupilSize = 1.5
       else
@@ -314,21 +322,24 @@ local ENTITY_CLASSES = {
       end
       love.graphics.setColor(pupilColor)
       love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
+      -- love.graphics.setColor(COLOR.DEBUG_GREEN)
+      -- love.graphics.circle('line', self.x, self.y, self.radius)
+      -- local eyeX, eyeY = self:getEyePosition()
+      -- love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
+    end,
+    drawForeground = function(self)
       -- Draw laser
+      local pupilX, pupilY = self:getPupilPosition()
       if self.attackStage and self.targetX and self.targetY then
         love.graphics.setColor(COLOR.RED)
         if self.attackStage == 'aiming' then
           drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1, 4, 4)
-        elseif self.attackStage == 'charging' and self.attackStageFrames % 4 < 2 then
+        elseif (self.attackStage == 'charging' and self.attackStageFrames % 6 < 2) or self.attackStage == 'cooldown' then
           drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1)
         elseif self.attackStage == 'shooting' then
           drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 2)
         end
       end
-      -- love.graphics.setColor(COLOR.DEBUG_GREEN)
-      -- love.graphics.circle('line', self.x, self.y, self.radius)
-      -- local eyeX, eyeY = self:getEyePosition()
-      -- love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
     end,
     getEyePosition = function(self)
       local x, y = self.x, self.y
@@ -377,6 +388,23 @@ local ENTITY_CLASSES = {
         local dy = target.y - pupilY
         self.attackAngle = math.atan2(dy, dx)
       end
+      self:calculateTarget()
+    end,
+    setEyeWhiteAngle = function(self, angle, distMult)
+      self.eyeWhiteOffsetX = 2.0 * distMult * math.cos(angle)
+      self.eyeWhiteOffsetY = 2.0 * distMult * math.sin(angle)
+    end,
+    setPupilAngle = function(self, angle, distMult)
+      local angleMult = ((2 * angle / math.pi) + 1) % 2
+      if angleMult > 1 then
+        angleMult = 2 - angleMult
+      end
+      angleMult = math.max(0.2, angleMult)
+      self.pupilOffsetX = 3.0 * (0.5 + 0.5 * angleMult) * distMult * math.cos(angle)
+      self.pupilOffsetY = 3.0 * (0.5 + 0.5 * angleMult) * distMult * math.sin(angle)
+    end,
+    calculateTarget = function(self)
+      local pupilX, pupilY = self:getPupilPosition()
       local aimX = math.cos(self.attackAngle)
       local aimY = math.sin(self.attackAngle)
       -- Figure out where the laser ends
@@ -399,19 +427,6 @@ local ENTITY_CLASSES = {
         self.targetX = pupilX + aimX / aimY * (GAME_HEIGHT + LASER_MARGIN.BOTTOM - pupilY)
         self.targetY = GAME_HEIGHT + LASER_MARGIN.BOTTOM
       end
-    end,
-    setEyeWhiteAngle = function(self, angle, distMult)
-      self.eyeWhiteOffsetX = 2.0 * distMult * math.cos(angle)
-      self.eyeWhiteOffsetY = 2.0 * distMult * math.sin(angle)
-    end,
-    setPupilAngle = function(self, angle, distMult)
-      local angleMult = ((2 * angle / math.pi) + 1) % 2
-      if angleMult > 1 then
-        angleMult = 2 - angleMult
-      end
-      angleMult = math.max(0.2, angleMult)
-      self.pupilOffsetX = 3.0 * (0.5 + 0.5 * angleMult) * distMult * math.cos(angle)
-      self.pupilOffsetY = 3.0 * (0.5 + 0.5 * angleMult) * distMult * math.sin(angle)
     end
   }
 }
@@ -503,7 +518,15 @@ function love.draw()
   -- Draw entities
   for _, entity in ipairs(entities) do
     love.graphics.setColor(COLOR.PURE_WHITE)
+    entity:drawBackground()
+  end
+  for _, entity in ipairs(entities) do
+    love.graphics.setColor(COLOR.PURE_WHITE)
     entity:draw()
+  end
+  for _, entity in ipairs(entities) do
+    love.graphics.setColor(COLOR.PURE_WHITE)
+    entity:drawForeground()
   end
   love.graphics.pop()
 end
@@ -555,10 +578,12 @@ function spawnEntity(className, params)
       self.x = self.x + self.vx * dt
       self.y = self.y + self.vy * dt
     end,
+    drawBackground = function(self) end,
     draw = function(self)
       love.graphics.setColor(COLOR.LIGHT_GREY)
       love.graphics.circle('fill', self.x, self.y, self.radius)
     end,
+    drawForeground = function(self) end,
     addToGame = function(self)
       table.insert(entities, self)
       if self.groups then
