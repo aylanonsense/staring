@@ -191,22 +191,73 @@ local ENTITY_CLASSES = {
     isPushable = false,
     isBeingTargeted = false,
     attackStage = nil,
+    attackStageFrames = 0,
+    timeUntilNextAttackStage = 0.00,
+    attackAngle = 0,
     targetX = nil,
     targetY = nil,
     update = function(self, dt)
+      -- Advance attack stages
+      if self.attackStage then
+        self.attackStageFrames = self.attackStageFrames + 1
+        self.timeUntilNextAttackStage = self.timeUntilNextAttackStage - dt
+        if self.timeUntilNextAttackStage <= 0.00 then
+          self.attackStageFrames = 0
+          if self.attackStage == 'aiming' then
+            self.attackStage = 'charging'
+            self.timeUntilNextAttackStage = 0.25
+          elseif self.attackStage == 'charging' then
+            self.attackStage = 'shooting'
+            self.timeUntilNextAttackStage = 2.00
+          elseif self.attackStage == 'shooting' then
+            self.attackStage = 'cooldown'
+            self.timeUntilNextAttackStage = 0.75
+          elseif self.attackStage == 'cooldown' then
+            self.attackStage = nil
+          end
+        end
+      end
       -- Figure out which player is closest, giving priority to players staring at the baddie
       local closestPlayer = self:getClosestPlayer()
-      self.isBeingTargeted = closestPlayer.target == self
-      -- Update eye
-      local eyeUpdateMult = 1.0
-      local eyeWhiteJitterMult = 0.0
-      local pupilJitterMult = 1.0
+      self.isBeingTargeted = (closestPlayer.target == self)
+      -- Jitter eye (especially while targeted)
+      local eyeWhiteJitterMult
+      local pupilJitterMult
       if self.isBeingTargeted then
-        eyeUpdateMult = 5.0
         eyeWhiteJitterMult = 1.0
-        pupilJitterMult = 3.5
+        pupilJitterMult = 1.0
+      elseif self.attackStage then
+        eyeWhiteJitterMult = 0.0
+        pupilJitterMult = 0.0
+      else
+        eyeWhiteJitterMult = 0.0
+        pupilJitterMult = 0.3
       end
-      if not self.attackStage then
+      local eyeWhiteJitterX = eyeWhiteJitterMult * (0.5 * math.random() - 0.25)
+      local eyeWhiteJitterY = eyeWhiteJitterMult * (0.5 * math.random() - 0.25)
+      local pupilJitterX = pupilJitterMult * (1.5 * math.random() - 0.75)
+      local pupilJitterY = pupilJitterMult * (1.5 * math.random() - 0.75)
+      -- Update eye
+      if self.attackStage then
+        -- Update eye position
+        if self.attackStage == 'aiming' then
+          self:setEyeWhiteAngle(self.attackAngle, 0.5)
+          self:setPupilAngle(self.attackAngle, 0.5)
+        elseif self.attackStage == 'charging' then
+          self:setEyeWhiteAngle(self.attackAngle, 0.3)
+          self:setPupilAngle(self.attackAngle, 0.5)
+        elseif self.attackStage == 'shooting' then
+          self:setEyeWhiteAngle(self.attackAngle, 1.0)
+          self:setPupilAngle(self.attackAngle, 0.7)
+        elseif self.attackStage == 'cooldown' then
+          self:setEyeWhiteAngle(self.attackAngle, 0.4)
+          self:setPupilAngle(self.attackAngle, 0.4)
+        end
+        self.eyeWhiteOffsetX = self.eyeWhiteOffsetX + eyeWhiteJitterX
+        self.eyeWhiteOffsetY = self.eyeWhiteOffsetY + eyeWhiteJitterY
+        self.pupilOffsetX = self.pupilOffsetX + pupilJitterX
+        self.pupilOffsetY = self.pupilOffsetY + pupilJitterY
+      elseif not self.attackStage then
         local eyeX, eyeY = self:getEyePosition()
         local playerEyeX, playerEyeY = closestPlayer:getEyePosition()
         local dx = playerEyeX - eyeX
@@ -215,25 +266,20 @@ local ENTITY_CLASSES = {
         local angle = math.atan2(dy, dx)
         local distMult = math.min(1.0, 0.35 + dist / 200)
         -- Update eye white offset
-        self.timeUntilEyeWhiteUpdate = self.timeUntilEyeWhiteUpdate - eyeUpdateMult * dt
-        if self.timeUntilEyeWhiteUpdate <= 0.00 then
+        self.timeUntilEyeWhiteUpdate = self.timeUntilEyeWhiteUpdate - dt
+        if self.timeUntilEyeWhiteUpdate <= 0.00 or self.isBeingTargeted then
           self.timeUntilEyeWhiteUpdate = 0.3 + 0.2 * math.random()
-          local eyeWhiteDist = distMult * 2.0
-          self.eyeWhiteOffsetX = eyeWhiteDist * math.cos(angle) + eyeWhiteJitterMult * (0.5 * math.random() - 0.25)
-          self.eyeWhiteOffsetY = eyeWhiteDist * math.sin(angle) + eyeWhiteJitterMult * (0.5 * math.random() - 0.25)
+          self:setEyeWhiteAngle(angle, distMult)
+          self.eyeWhiteOffsetX = self.eyeWhiteOffsetX + eyeWhiteJitterX
+          self.eyeWhiteOffsetY = self.eyeWhiteOffsetY + eyeWhiteJitterY
         end
         -- Update pupil offset
-        self.timeUntilPupilUpdate = self.timeUntilPupilUpdate - eyeUpdateMult * dt
-        if self.timeUntilPupilUpdate <= 0.00 then
+        self.timeUntilPupilUpdate = self.timeUntilPupilUpdate - dt
+        if self.timeUntilPupilUpdate <= 0.00 or self.isBeingTargeted then
           self.timeUntilPupilUpdate = 0.1 + 0.2 * math.random()
-          local angleMult = ((2 * angle / math.pi) + 1) % 2
-          if angleMult > 1 then
-            angleMult = 2 - angleMult
-          end
-          angleMult = math.max(0.2, angleMult)
-          local pupilDist = distMult * (1.5 + 1.3 * angleMult)
-          self.pupilOffsetX = pupilDist * math.cos(angle) + pupilJitterMult * (0.5 * math.random() - 0.25)
-          self.pupilOffsetY = pupilDist * math.sin(angle) + pupilJitterMult * (0.5 * math.random() - 0.25)
+          self:setPupilAngle(angle, distMult)
+          self.pupilOffsetX = self.pupilOffsetX + pupilJitterX
+          self.pupilOffsetY = self.pupilOffsetY + pupilJitterY
         end
         -- Blink every so often
         self.blinkFrames = self.blinkFrames - 1
@@ -259,7 +305,7 @@ local ENTITY_CLASSES = {
       -- Draw pupil
       local pupilColor
       local pupilSize
-      if self.attackStage then
+      if self.attackStage and self.attackStage ~= 'cooldown' then
         pupilColor = COLOR.RED
         pupilSize = 1.5
       else
@@ -269,9 +315,15 @@ local ENTITY_CLASSES = {
       love.graphics.setColor(pupilColor)
       love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
       -- Draw laser
-      if self.targetX and self.targetY then
+      if self.attackStage and self.targetX and self.targetY then
         love.graphics.setColor(COLOR.RED)
-        drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1, 4, 4)
+        if self.attackStage == 'aiming' then
+          drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1, 4, 4)
+        elseif self.attackStage == 'charging' and self.attackStageFrames % 4 < 2 then
+          drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1)
+        elseif self.attackStage == 'shooting' then
+          drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 2)
+        end
       end
       -- love.graphics.setColor(COLOR.DEBUG_GREEN)
       -- love.graphics.circle('line', self.x, self.y, self.radius)
@@ -307,25 +359,26 @@ local ENTITY_CLASSES = {
       return closestPlayer
     end,
     attack = function(self, angleOrX, y)
-      self.timeUntilBlink = 0.50
+      self.timeUntilBlink = 0.00
       self.blinkFrames = 0
       self.attackStage = 'aiming'
-      local angle
+      self.attackStageFrames = 0
+      self.timeUntilNextAttackStage = 1.00
       local pupilX, pupilY = self:getPupilPosition()
       if angleOrX and y then
         local dx = angleOrX - pupilX
         local dy = y - pupilY
-        angle = math.atan2(dy, dx)
+        self.attackAngle = math.atan2(dy, dx)
       elseif angleOrX and not y then
-        angle = angleOrX
+        self.attackAngle = angleOrX
       else
         local target = self:getClosestPlayer()
         local dx = target.x - pupilX
         local dy = target.y - pupilY
-        angle = math.atan2(dy, dx)
+        self.attackAngle = math.atan2(dy, dx)
       end
-      local aimX = math.cos(angle)
-      local aimY = math.sin(angle)
+      local aimX = math.cos(self.attackAngle)
+      local aimY = math.sin(self.attackAngle)
       -- Figure out where the laser ends
       self.targetX = pupilX + 999 * aimX
       self.targetY = pupilY + 999 * aimY
@@ -346,17 +399,19 @@ local ENTITY_CLASSES = {
         self.targetX = pupilX + aimX / aimY * (GAME_HEIGHT + LASER_MARGIN.BOTTOM - pupilY)
         self.targetY = GAME_HEIGHT + LASER_MARGIN.BOTTOM
       end
-      -- Update eye position
-      self.eyeWhiteOffsetX = 0.5 * math.cos(angle)
-      self.eyeWhiteOffsetY = 0.5 * math.sin(angle)
+    end,
+    setEyeWhiteAngle = function(self, angle, distMult)
+      self.eyeWhiteOffsetX = 2.0 * distMult * math.cos(angle)
+      self.eyeWhiteOffsetY = 2.0 * distMult * math.sin(angle)
+    end,
+    setPupilAngle = function(self, angle, distMult)
       local angleMult = ((2 * angle / math.pi) + 1) % 2
       if angleMult > 1 then
         angleMult = 2 - angleMult
       end
       angleMult = math.max(0.2, angleMult)
-      local pupilDist = 0.75 * (1.5 + 1.3 * angleMult)
-      self.pupilOffsetX = pupilDist * math.cos(angle)
-      self.pupilOffsetY = pupilDist * math.sin(angle)
+      self.pupilOffsetX = 3.0 * (0.5 + 0.5 * angleMult) * distMult * math.cos(angle)
+      self.pupilOffsetY = 3.0 * (0.5 + 0.5 * angleMult) * distMult * math.sin(angle)
     end
   }
 }
