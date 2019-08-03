@@ -1,6 +1,7 @@
 local Controllers = require('src/Controller.lua')
 
 -- Constants
+local DEBUG_MODE = false
 local COLOR = {
   LIGHT_GREY = { 205 / 255, 205 / 255, 205 / 255 }, -- #cdcdcd
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
@@ -9,7 +10,8 @@ local COLOR = {
   PURPLE = { 179 / 255, 92 / 255, 222 / 255 }, -- #b35cde
   GREEN = { 101 / 255, 156 / 255, 68 / 255 }, -- #659c44
   PURE_WHITE = { 1, 1, 1 }, -- #ffffff
-  DEBUG_GREEN = { 0, 1, 0 } -- #00ff00
+  DEBUG_GREEN = { 0, 1, 0 }, -- #00ff00
+  DEBUG_BLUE = { 0, 0, 1 } -- #0000ff
 }
 local GAME_X = 27
 local GAME_Y = 65
@@ -48,7 +50,7 @@ local ENTITY_CLASSES = {
   player = {
     groups = { players, obstacles },
     eyeRadius = 5,
-    radius = 5,
+    radius = 6,
     facingX = 1.0,
     facingY = 0.0,
     aimX = 1.0,
@@ -182,8 +184,10 @@ local ENTITY_CLASSES = {
         -- Draw body
         love.graphics.setColor(COLOR.PURE_WHITE)
         drawSprite(1, self.color == COLOR.PURPLE and 329 or 348, 23, 18, self.x - 12.5, self.y - 9)
-        -- love.graphics.setColor(COLOR.DEBUG_GREEN)
-        -- love.graphics.circle('line', self.x, self.y, self.radius)
+        if DEBUG_MODE then
+          love.graphics.setColor(COLOR.DEBUG_BLUE)
+          love.graphics.circle('line', self.x, self.y, self.radius)
+        end
       elseif renderLayer == 4 then
         -- Draw laser
         if self.isAiming then
@@ -200,6 +204,11 @@ local ENTITY_CLASSES = {
         local pupilX, pupilY = self:getPupilPosition()
         love.graphics.setColor(self.color)
         love.graphics.rectangle('fill', pupilX - 0.5, pupilY - 0.5, 1, 1)
+        if DEBUG_MODE then
+          local eyeX, eyeY = self:getEyePosition()
+          love.graphics.setColor(COLOR.DEBUG_GREEN)
+          love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
+        end
       end
     end,
     getController = function(self)
@@ -219,10 +228,10 @@ local ENTITY_CLASSES = {
   },
   baddie = {
     groups = { obstacles },
-    radius = 7,
+    radius = 5,
     eyeRadius = 5,
     eyeOffsetX = 0,
-    eyeOffsetY = -20,
+    eyeOffsetY = -21,
     eyeWhiteOffsetX = 0,
     eyeWhiteOffsetY = 0,
     timeUntilEyeWhiteUpdate = 0.00,
@@ -344,17 +353,25 @@ local ENTITY_CLASSES = {
       if renderLayer == 1 then
         -- Draw shadow
         local shadowSprite = 5
-        drawSprite(100 + 20 * (shadowSprite - 1), 173, 19, 7, self.x - 9.5, self.y + 0)
+        drawSprite(100 + 20 * (shadowSprite - 1), 173, 19, 7, self.x - 9.5, self.y - 1)
       elseif renderLayer == 3 then
         -- Draw body
         local bodyFrame = 3
-        drawSprite(24 * (bodyFrame - 1) + 1, 181, 23, 36, self.x - 11.5, self.y - 26)
+        drawSprite(24 * (bodyFrame - 1) + 1, 181, 23, 36, self.x - 11.5, self.y - 27)
+        if DEBUG_MODE then
+          love.graphics.setColor(COLOR.DEBUG_BLUE)
+          love.graphics.circle('line', self.x, self.y, self.radius)
+        end
       elseif renderLayer == 4 then
         local pupilX, pupilY = self:getPupilPosition()
         local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
         -- Draw eye white
         local eyeFrame = 3
-        if self.blinkFrames > 0 then
+        if self.attackStage == 'charging' then
+          eyeFrame = 4
+        elseif self.attackStage == 'shooting' then
+          eyeFrame = 2
+        elseif self.blinkFrames > 0 then
           -- local b = math.abs(math.ceil(self.blinkFrames / 2) - 3) -- 2 to 0 to 2
           eyeFrame = 6 - math.abs(math.ceil(self.blinkFrames / 2) - 3)
         end
@@ -371,10 +388,11 @@ local ENTITY_CLASSES = {
         end
         love.graphics.setColor(pupilColor)
         love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
-        -- love.graphics.setColor(COLOR.DEBUG_GREEN)
-        -- love.graphics.circle('line', self.x, self.y, self.radius)
-        -- local eyeX, eyeY = self:getEyePosition()
-        -- love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
+        if DEBUG_MODE then
+          local eyeX, eyeY = self:getEyePosition()
+          love.graphics.setColor(COLOR.DEBUG_GREEN)
+          love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
+        end
       elseif renderLayer == 5 then
         -- Draw laser
         local pupilX, pupilY = self:getPupilPosition()
