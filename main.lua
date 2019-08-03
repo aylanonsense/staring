@@ -122,14 +122,22 @@ local ENTITY_CLASSES = {
         -- See if the we're aiming at anything
         for _, obstacle in ipairs(obstacles) do
           if obstacle ~= self then
-            local eyeX, eyeY = obstacle:getEyePosition()
-            local isIntersecting, x, y = calcCircleLineIntersection(self.x, self.y, self.targetX, self.targetY, eyeX, eyeY, obstacle.eyeRadius)
+            local eyeX, eyeY = self:getEyePosition()
+            local obstacleEyeX, obstacleEyeY = obstacle:getEyePosition()
+            local dx = eyeX - obstacleEyeX
+            local dy = eyeY - obstacleEyeY
+            local dist = math.sqrt(dx * dx + dy * dy)
+            local fudgeRadius = math.min(math.max(0, dist / 15 - 1.5), 10)
+            local isIntersecting, x, y = calcCircleLineIntersection(self.x, self.y, self.targetX, self.targetY, obstacleEyeX, obstacleEyeY, obstacle.eyeRadius + fudgeRadius)
             if isIntersecting then
               self.target = obstacle
               self.targetX = x
               self.targetY = y
             end
           end
+        end
+        if self.target then
+          self.targetX, self.targetY = self.target:getEyePosition()
         end
         -- Keep target in bounds
         if self.targetX < -LASER_MARGIN.SIDE then

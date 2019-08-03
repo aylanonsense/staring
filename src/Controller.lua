@@ -16,9 +16,6 @@ function BlankController:new()
     isDashing = function(self)
       return false
     end,
-    justStartedAiming = function(self)
-      return false
-    end,
     isAiming = function(self)
       return false
     end,
@@ -33,21 +30,15 @@ function MouseAndKeyboardController:new()
   return {
     type = 'mouse-and-keyboard-controller',
     _framesSinceDash = 0,
-    _framesSinceAim = 0,
     update = function(self, dt)
       self._framesSinceDash = math.max(0, self._framesSinceDash - 1)
-      self._framesSinceAim = math.max(0, self._framesSinceAim - 1)
     end,
     keypressed = function(self, btn)
       if btn == 'lshift' then
         self._framesSinceDash = INPUT_BUFFER_FRAMES
       end
     end,
-    mousepressed = function(self, x, y, btn)
-      if btn == 1 then
-        self._framesSinceAim = INPUT_BUFFER_FRAMES
-      end
-    end,
+    mousepressed = function(self, x, y, btn) end,
     getMoveDirection = function(self)
       local isPressingUp = love.keyboard.isDown('up') or love.keyboard.isDown('w')
       local isPressingLeft = love.keyboard.isDown('left') or love.keyboard.isDown('a')
@@ -84,9 +75,6 @@ function MouseAndKeyboardController:new()
     isDashing = function(self)
       return love.keyboard.isDown('lshift')
     end,
-    justStartedAiming = function(self)
-      return self._framesSinceAim > 0
-    end,
     isAiming = function(self)
       return love.mouse.isDown(1)
     end,
@@ -102,17 +90,13 @@ function JoystickController:new(joystick)
     type = 'joystick-controller',
     _joystick = joystick,
     _framesSinceDash = 0,
-    _framesSinceAim = 0,
     update = function(self, dt)
       self._framesSinceDash = math.max(0, self._framesSinceDash - 1)
-      self._framesSinceAim = math.max(0, self._framesSinceAim - 1)
     end,
     joystickpressed = function(self, joystick, btn)
       if joystick == self._joystick then
         if btn == 5 or btn == 7 then
           self._framesSinceDash = INPUT_BUFFER_FRAMES
-        elseif btn == 6 or btn == 8 then
-          self._framesSinceAim = INPUT_BUFFER_FRAMES
         end
       end
     end,
@@ -166,11 +150,9 @@ function JoystickController:new(joystick)
     isDashing = function(self)
       return self._joystick:isDown(5) or self._joystick:isDown(7)
     end,
-    justStartedAiming = function(self)
-      return self._framesSinceAim > 0
-    end,
     isAiming = function(self)
-      return self._joystick:isDown(6) or self._joystick:isDown(8)
+      local aimX, aimY, aimMult = self:getAimDirection()
+      return aimMult > 0.0
     end,
     isActive = function(self)
       return self._joystick:isConnected()
