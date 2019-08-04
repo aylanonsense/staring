@@ -33,15 +33,16 @@ local BADDIE_SPRITES = {
   { x = 0, y = 22 },
   { x = 0, y = 7 },
   { x = 0, y = 3 },
-  { x = -1, y = 9 },
+  { x = -1, y = 9, isBig = true },
   { x = 4, y = 12 },
-  { x = 1, y = 13 },
+  { x = 0, y = 13, isBig = true },
   { x = -1, y = 19 },
-  { x = 0, y = -2 },
-  { x = 0, y = 8 },
+  { x = 0, y = 4, isBig = true },
+  { x = 0, y = 7 },
   { x = 0, y = 14 },
-  { x = 0, y = 1 },
-  { x = 0, y = 5 },
+
+  { x = 0, y = 6 },
+  { x = 0, y = 7 },
   { x = 0, y = 6 },
   { x = -3, y = 6 },
   { x = 2, y = 4 },
@@ -52,30 +53,32 @@ local BADDIE_SPRITES = {
   { x = 0, y = 19 },
   { x = 0, y = 10 },
   { x = 0, y = 19 },
-  { x = 0, y = 3 },
+
   { x = 0, y = 5 },
-  { x = 2, y = 5 },
+  { x = 0, y = 5 },
+  { x = 2, y = 7 },
   { x = 0, y = 7 },
-  { x = -2, y = 3 },
+  { x = -2, y = 3, isBig = true },
   { x = 0, y = 8 },
   { x = 0, y = 10 },
-  { x = 0, y = 9 },
+  { x = 0, y = 11 },
   { x = 0, y = 7 },
   { x = 0, y = 10 },
-  { x = 0, y = 9 },
+  { x = 0, y = 10 },
   { x = 0, y = 14 },
-  { x = -2, y = -2 },
-  { x = 0, y = 3 },
-  { x = 0, y = 3 },
-  { x = 0, y = 4 },
-  { x = 0, y = 5 },
+
+  { x = -2, y = 3 },
   { x = 0, y = 5 },
   { x = 0, y = 4 },
-  { x = 2, y = 6 },
-  { x = 0, y = 5 },
+  { x = 0, y = 6 },
+  { x = 0, y = 8 },
+  { x = 0, y = 6 },
+  { x = 0, y = 4 },
+  { x = 2, y = 7 },
+  { x = 0, y = 8 },
   { x = 4, y = 9 },
-  { x = -2, y = 10 },
-  { x = 1, y = 19 }
+  { x = -1, y = 11 },
+  { x = 1, y = 20 }
 }
 local SEATS = {
   { x = 4, y = -6, priority = 1, isSeated = true },
@@ -346,7 +349,6 @@ local ENTITY_CLASSES = {
   },
   baddie = {
     groups = { baddies, obstacles },
-    radius = 5,
     eyeRadius = 5,
     eyeOffsetX = 0,
     eyeOffsetY = 0,
@@ -367,8 +369,11 @@ local ENTITY_CLASSES = {
     targetX = nil,
     targetY = nil,
     init = function(self)
-      self.bodyFlipped = math.random() < 0.5
       self.bodySprite = math.random(1, 48)
+      self.bodyFlipped = math.random() < 0.5
+      local isBig = BADDIE_SPRITES[self.bodySprite].isBig
+      self.radius = isBig and 7 or 5
+      self.shadowSprite = isBig and 6 or 5
       self.eyeOffsetX = (self.bodyFlipped and -1 or 1) * BADDIE_SPRITES[self.bodySprite].x
       self.eyeOffsetY = -BADDIE_SPRITES[self.bodySprite].y
     end,
@@ -447,7 +452,7 @@ local ENTITY_CLASSES = {
         local dy = playerEyeY - eyeY
         local dist = math.sqrt(dx * dx + dy * dy)
         local angle = math.atan2(dy, dx)
-        local distMult = math.min(1.0, 0.35 + dist / 200)
+        local distMult = math.min(0.9, 0.35 + dist / 125)
         -- Update eye white offset
         self.timeUntilEyeWhiteUpdate = self.timeUntilEyeWhiteUpdate - dt
         if self.timeUntilEyeWhiteUpdate <= 0.00 or self.isBeingTargeted then
@@ -477,8 +482,7 @@ local ENTITY_CLASSES = {
       if renderLayer == 1 then
         if not self.seat.isSeated then
           -- Draw shadow
-          local shadowSprite = 5
-          drawSprite(100 + 20 * (shadowSprite - 1), 185, 19, 7, self.x - 9.5, self.y - 2)
+          drawSprite(100 + 20 * (self.shadowSprite - 1), 185, 19, 7, self.x - 9.5, self.y - 2)
         end
       elseif renderLayer == 3 then
         -- Draw body
@@ -655,7 +659,7 @@ end
 function love.update(dt)
   -- Update level phase
   levelFrame = levelFrame + 1
-  if levelPhase == 'doors-opening' and levelFrame > 60 then
+  if levelPhase == 'doors-opening' and levelFrame > 0 then -- 60 then
     levelPhase = 'passengers-boarding'
     levelFrame = 0
     numPassengersLeftToBoard = 43
