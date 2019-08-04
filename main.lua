@@ -3,19 +3,19 @@ local Controllers = require('src/Controller.lua')
 -- Constants
 local DEBUG_MODE = false
 local COLOR = {
-  LIGHT_GREY = { 205 / 255, 205 / 255, 205 / 255 }, -- #cdcdcd
+  LIGHT_GREY = { 191 / 255, 190 / 255, 190 / 255 }, -- #bfbebe
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
   WHITE = { 243 / 255, 241 / 255, 241 / 255 }, -- #f3f1f1
   RED = { 239 / 255, 34 / 255, 9 / 255 }, -- #ef2209
-  PURPLE = { 179 / 255, 92 / 255, 222 / 255 }, -- #b35cde
-  GREEN = { 101 / 255, 156 / 255, 68 / 255 }, -- #659c44
+  PURPLE = { 181 / 255, 115 / 255, 229 / 255 }, -- #b573e5
+  GREEN = { 115 / 255, 177 / 255, 72 / 255 }, -- #73b148
   PURE_WHITE = { 1, 1, 1 }, -- #ffffff
   DEBUG_GREEN = { 0, 1, 0 }, -- #00ff00
   DEBUG_BLUE = { 0, 0, 1 } -- #0000ff
 }
-local GAME_X = 27
-local GAME_Y = 65
-local GAME_WIDTH = 256
+local GAME_X = 23
+local GAME_Y = 64
+local GAME_WIDTH = 254
 local GAME_HEIGHT = 105
 local PLAYER_MOVE_SPEED = 60
 local PLAYER_DASH_SPEED = 600
@@ -148,23 +148,24 @@ local ENTITY_CLASSES = {
         end
         if self.target then
           self.targetX, self.targetY = self.target:getEyePosition()
-        end
-        -- Keep target in bounds
-        if self.targetX < -LASER_MARGIN.SIDE then
-          self.targetX = -LASER_MARGIN.SIDE
-          self.targetY = self.y + self.aimY / self.aimX * (-LASER_MARGIN.SIDE - self.x)
-        end
-        if self.targetX > GAME_WIDTH + LASER_MARGIN.SIDE then
-          self.targetX = GAME_WIDTH + LASER_MARGIN.SIDE
-          self.targetY = self.y + self.aimY / self.aimX * (GAME_WIDTH + LASER_MARGIN.SIDE - self.x)
-        end
-        if self.targetY < -LASER_MARGIN.TOP then
-          self.targetX = self.x + self.aimX / self.aimY * (-LASER_MARGIN.TOP - self.y)
-          self.targetY = -LASER_MARGIN.TOP
-        end
-        if self.targetY > GAME_HEIGHT + LASER_MARGIN.BOTTOM then
-          self.targetX = self.x + self.aimX / self.aimY * (GAME_HEIGHT + LASER_MARGIN.BOTTOM - self.y)
-          self.targetY = GAME_HEIGHT + LASER_MARGIN.BOTTOM
+        else
+          -- Keep target in bounds
+          if self.targetX < -LASER_MARGIN.SIDE then
+            self.targetX = -LASER_MARGIN.SIDE
+            self.targetY = self.y + self.aimY / self.aimX * (-LASER_MARGIN.SIDE - self.x)
+          end
+          if self.targetX > GAME_WIDTH + LASER_MARGIN.SIDE then
+            self.targetX = GAME_WIDTH + LASER_MARGIN.SIDE
+            self.targetY = self.y + self.aimY / self.aimX * (GAME_WIDTH + LASER_MARGIN.SIDE - self.x)
+          end
+          if self.targetY < -LASER_MARGIN.TOP then
+            self.targetX = self.x + self.aimX / self.aimY * (-LASER_MARGIN.TOP - self.y)
+            self.targetY = -LASER_MARGIN.TOP
+          end
+          if self.targetY > GAME_HEIGHT + LASER_MARGIN.BOTTOM then
+            self.targetX = self.x + self.aimX / self.aimY * (GAME_HEIGHT + LASER_MARGIN.BOTTOM - self.y)
+            self.targetY = GAME_HEIGHT + LASER_MARGIN.BOTTOM
+          end
         end
       end
       -- Update eye
@@ -179,11 +180,11 @@ local ENTITY_CLASSES = {
       if renderLayer == 1 then
         -- Draw shadow
         local shadowSprite = 5
-        drawSprite(100 + 20 * (shadowSprite - 1), 173, 19, 7, self.x - 9.5, self.y + 1)
+        drawSprite(100 + 20 * (shadowSprite - 1), 185, 19, 7, self.x - 9.5, self.y - 1)
       elseif renderLayer == 3 then
         -- Draw body
         love.graphics.setColor(COLOR.PURE_WHITE)
-        drawSprite(1, self.color == COLOR.PURPLE and 329 or 348, 23, 18, self.x - 12.5, self.y - 9)
+        drawSprite(1, self.color == COLOR.PURPLE and 341 or 360, 23, 18, self.x - 12.5, self.y - 11)
         if DEBUG_MODE then
           love.graphics.setColor(COLOR.DEBUG_BLUE)
           love.graphics.circle('line', self.x, self.y, self.radius)
@@ -200,7 +201,7 @@ local ENTITY_CLASSES = {
         love.graphics.setColor(COLOR.PURE_WHITE)
         local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
         local eyeFrame = 3
-        drawSprite(56 + 11 * (eyeFrame - 1), 173, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3)
+        drawSprite(56 + 11 * (eyeFrame - 1), 185, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3)
         local pupilX, pupilY = self:getPupilPosition()
         love.graphics.setColor(self.color)
         love.graphics.rectangle('fill', pupilX - 0.5, pupilY - 0.5, 1, 1)
@@ -215,7 +216,7 @@ local ENTITY_CLASSES = {
       return playerControllers[self.playerNum] or blankController
     end,
     getEyePosition = function(self)
-      return self.x, self.y
+      return self.x, self.y - 2
     end,
     getEyeWhitePosition = function(self)
       local x, y = self:getEyePosition()
@@ -231,7 +232,7 @@ local ENTITY_CLASSES = {
     radius = 5,
     eyeRadius = 5,
     eyeOffsetX = 0,
-    eyeOffsetY = -21,
+    eyeOffsetY = -22,
     eyeWhiteOffsetX = 0,
     eyeWhiteOffsetY = 0,
     timeUntilEyeWhiteUpdate = 0.00,
@@ -316,7 +317,7 @@ local ENTITY_CLASSES = {
         self.pupilOffsetX = self.pupilOffsetX + pupilJitterX
         self.pupilOffsetY = self.pupilOffsetY + pupilJitterY
         self:calculateTarget()
-      elseif not self.attackStage then
+      else
         local eyeX, eyeY = self:getEyePosition()
         local playerEyeX, playerEyeY = closestPlayer:getEyePosition()
         local dx = playerEyeX - eyeX
@@ -353,11 +354,11 @@ local ENTITY_CLASSES = {
       if renderLayer == 1 then
         -- Draw shadow
         local shadowSprite = 5
-        drawSprite(100 + 20 * (shadowSprite - 1), 173, 19, 7, self.x - 9.5, self.y - 1)
+        drawSprite(100 + 20 * (shadowSprite - 1), 185, 19, 7, self.x - 9.5, self.y - 2)
       elseif renderLayer == 3 then
         -- Draw body
         local bodyFrame = 3
-        drawSprite(24 * (bodyFrame - 1) + 1, 181, 23, 36, self.x - 11.5, self.y - 27)
+        drawSprite(24 * (bodyFrame - 1) + 1, 193, 23, 36, self.x - 11.5, self.y - 28)
         if DEBUG_MODE then
           love.graphics.setColor(COLOR.DEBUG_BLUE)
           love.graphics.circle('line', self.x, self.y, self.radius)
@@ -375,7 +376,7 @@ local ENTITY_CLASSES = {
           -- local b = math.abs(math.ceil(self.blinkFrames / 2) - 3) -- 2 to 0 to 2
           eyeFrame = 6 - math.abs(math.ceil(self.blinkFrames / 2) - 3)
         end
-        drawSprite(11 * (eyeFrame - 1) + 1, 173, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3.5)
+        drawSprite(11 * (eyeFrame - 1) + 1, 185, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3.5)
         -- Draw pupil
         local pupilColor
         local pupilSize
@@ -428,10 +429,10 @@ local ENTITY_CLASSES = {
         local dx = player.x - self.x
         local dy = player.y - self.y
         local squareDist = dx * dx + dy * dy
-        if (not closestPlayer or squareDist < closestPlayerSquareDist) and (player.target == self or not closestPlayerIsTargeting) then
+        if (not closestPlayer or squareDist < closestPlayerSquareDist or (not closestPlayerIsTargeting and player.target == self)) and (not closestPlayerIsTargeting or player.target == self) then
           closestPlayer = player
           closestPlayerSquareDist = squareDist
-          closestPlayerIsTargeting = player.target == self
+          closestPlayerIsTargeting = (player.target == self)
         end
       end
       return closestPlayer
@@ -580,10 +581,14 @@ function love.draw()
   -- Clear the screen
   love.graphics.clear(COLOR.WHITE)
   -- Draw the background
-  drawSprite(1, 1, 300, 163, 5, 21)
+  drawSprite(1, 1, 300, 183, 0, 9)
   -- Draw the game
   love.graphics.push()
   love.graphics.translate(GAME_X, GAME_Y)
+  if DEBUG_MODE then
+    love.graphics.setColor(COLOR.DEBUG_BLUE)
+    love.graphics.rectangle('line', 0, 0, GAME_WIDTH, GAME_HEIGHT)
+  end
   -- Draw entities
   for renderLayer = 1, 6 do
     for _, entity in ipairs(entities) do
