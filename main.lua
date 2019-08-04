@@ -39,7 +39,43 @@ local BADDIE_SPRITES = {
   { x = -1, y = 19 },
   { x = 0, y = -2 },
   { x = 0, y = 8 },
-  { x = 0, y = 14 }
+  { x = 0, y = 14 },
+  { x = 0, y = 1 },
+  { x = 0, y = 5 },
+  { x = 0, y = 6 },
+  { x = -3, y = 6 },
+  { x = 2, y = 4 },
+  { x = -1, y = 6 },
+  { x = 0, y = 14 },
+  { x = 0, y = 15 },
+  { x = 1, y = 16 },
+  { x = 0, y = 19 },
+  { x = 0, y = 10 },
+  { x = 0, y = 19 },
+  { x = 0, y = 3 },
+  { x = 0, y = 5 },
+  { x = 2, y = 5 },
+  { x = 0, y = 7 },
+  { x = -2, y = 3 },
+  { x = 0, y = 8 },
+  { x = 0, y = 10 },
+  { x = 0, y = 9 },
+  { x = 0, y = 7 },
+  { x = 0, y = 10 },
+  { x = 0, y = 9 },
+  { x = 0, y = 14 },
+  { x = -2, y = -2 },
+  { x = 0, y = 3 },
+  { x = 0, y = 3 },
+  { x = 0, y = 4 },
+  { x = 0, y = 5 },
+  { x = 0, y = 5 },
+  { x = 0, y = 4 },
+  { x = 2, y = 6 },
+  { x = 0, y = 5 },
+  { x = 4, y = 9 },
+  { x = -2, y = 10 },
+  { x = 1, y = 19 }
 }
 local SEATS = {
   { x = 4, y = -6, priority = 1, isSeated = true },
@@ -332,7 +368,7 @@ local ENTITY_CLASSES = {
     targetY = nil,
     init = function(self)
       self.bodyFlipped = math.random() < 0.5
-      self.bodySprite = math.random(1, 12)
+      self.bodySprite = math.random(1, 48)
       self.eyeOffsetX = (self.bodyFlipped and -1 or 1) * BADDIE_SPRITES[self.bodySprite].x
       self.eyeOffsetY = -BADDIE_SPRITES[self.bodySprite].y
     end,
@@ -432,7 +468,7 @@ local ENTITY_CLASSES = {
         self.blinkFrames = self.blinkFrames - 1
         self.timeUntilBlink = self.timeUntilBlink - dt
         if self.timeUntilBlink <= 0.00 then
-          self.timeUntilBlink = 2.00 + 5.00 * math.random()
+          self.timeUntilBlink = 1.50 + 4.00 * math.random()
           self.blinkFrames = 11
         end
       end
@@ -446,7 +482,7 @@ local ENTITY_CLASSES = {
         end
       elseif renderLayer == 3 then
         -- Draw body
-        drawSprite(24 * (self.bodySprite - 1) + 1, 193, 23, 36, self.x - 11.5, self.y - 28, self.bodyFlipped)
+        drawSprite(1 + 24 * ((self.bodySprite - 1) % 12), 193 + 37 * math.floor((self.bodySprite - 1) / 12), 23, 36, self.x - 11.5, self.y - 28, self.bodyFlipped)
         if DEBUG_MODE then
           love.graphics.setColor(COLOR.DEBUG_BLUE)
           love.graphics.circle('line', self.x, self.y, self.radius)
@@ -622,7 +658,7 @@ function love.update(dt)
   if levelPhase == 'doors-opening' and levelFrame > 60 then
     levelPhase = 'passengers-boarding'
     levelFrame = 0
-    numPassengersLeftToBoard = 10
+    numPassengersLeftToBoard = 43
     for _, seat in ipairs(SEATS) do
       seat.passenger = nil
     end
