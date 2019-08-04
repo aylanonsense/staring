@@ -23,9 +23,9 @@ local PLAYER_DASH_FRICTION = 0.15
 local PLAYER_DASH_DURATION = 0.25
 local PLAYER_DASH_COOLDOWN = 0.10
 local LASER_MARGIN = {
-  TOP = 20,
-  SIDE = 10,
-  BOTTOM = 10
+  TOP = 24,
+  SIDE = 12,
+  BOTTOM = 12
 }
 
 -- Assets
@@ -37,13 +37,18 @@ local mouseAndKeyboardController
 local joystickControllers
 local playerControllers
 
--- Entity groups
-local players = {}
-local obstacles = {}
+-- Game variables
+local levelNumber
+local levelPhase
+local levelFrame
 
 -- Entity variables
 local entities
 local newEntities
+
+-- Entity groups
+local players = {}
+local obstacles = {}
 
 -- Entity classes
 local ENTITY_CLASSES = {
@@ -243,33 +248,33 @@ local ENTITY_CLASSES = {
     blinkFrames = 0,
     isPushable = false,
     isBeingTargeted = false,
-    attackStage = nil,
-    attackStageFrames = 0,
-    timeUntilNextAttackStage = 0.00,
+    attackPhase = nil,
+    attackPhaseFrames = 0,
+    timeUntilNextAttackPhase = 0.00,
     attackAngle = 0,
     targetX = nil,
     targetY = nil,
     update = function(self, dt)
       -- Advance attack stages
-      if self.attackStage then
-        self.attackStageFrames = self.attackStageFrames + 1
-        self.timeUntilNextAttackStage = self.timeUntilNextAttackStage - dt
-        if self.timeUntilNextAttackStage <= 0.00 then
-          self.attackStageFrames = 0
-          if self.attackStage == 'aiming' then
-            self.attackStage = 'charging'
-            self.timeUntilNextAttackStage = 0.25
-          elseif self.attackStage == 'charging' then
-            self.attackStage = 'shooting'
-            self.timeUntilNextAttackStage = 2.00
-          elseif self.attackStage == 'shooting' then
-            self.attackStage = 'cooldown'
-            self.timeUntilNextAttackStage = 0.10
-          elseif self.attackStage == 'cooldown' then
-            self.attackStage = 'pausing'
-            self.timeUntilNextAttackStage = 0.75
-          elseif self.attackStage == 'pausing' then
-            self.attackStage = nil
+      if self.attackPhase then
+        self.attackPhaseFrames = self.attackPhaseFrames + 1
+        self.timeUntilNextAttackPhase = self.timeUntilNextAttackPhase - dt
+        if self.timeUntilNextAttackPhase <= 0.00 then
+          self.attackPhaseFrames = 0
+          if self.attackPhase == 'aiming' then
+            self.attackPhase = 'charging'
+            self.timeUntilNextAttackPhase = 0.25
+          elseif self.attackPhase == 'charging' then
+            self.attackPhase = 'shooting'
+            self.timeUntilNextAttackPhase = 2.00
+          elseif self.attackPhase == 'shooting' then
+            self.attackPhase = 'cooldown'
+            self.timeUntilNextAttackPhase = 0.10
+          elseif self.attackPhase == 'cooldown' then
+            self.attackPhase = 'pausing'
+            self.timeUntilNextAttackPhase = 0.75
+          elseif self.attackPhase == 'pausing' then
+            self.attackPhase = nil
           end
         end
       end
@@ -282,7 +287,7 @@ local ENTITY_CLASSES = {
       if self.isBeingTargeted then
         eyeWhiteJitterMult = 1.0
         pupilJitterMult = 1.0
-      elseif self.attackStage then
+      elseif self.attackPhase then
         eyeWhiteJitterMult = 0.25
         pupilJitterMult = 0.25
       else
@@ -294,21 +299,21 @@ local ENTITY_CLASSES = {
       local pupilJitterX = pupilJitterMult * (1.5 * math.random() - 0.75)
       local pupilJitterY = pupilJitterMult * (1.5 * math.random() - 0.75)
       -- Update eye
-      if self.attackStage then
+      if self.attackPhase then
         -- Update eye position
-        if self.attackStage == 'aiming' then
+        if self.attackPhase == 'aiming' then
           self:setEyeWhiteAngle(self.attackAngle, 0.5)
           self:setPupilAngle(self.attackAngle, 0.5)
-        elseif self.attackStage == 'charging' then
+        elseif self.attackPhase == 'charging' then
           self:setEyeWhiteAngle(self.attackAngle, 0.3)
           self:setPupilAngle(self.attackAngle, 0.5)
-        elseif self.attackStage == 'shooting' then
+        elseif self.attackPhase == 'shooting' then
           self:setEyeWhiteAngle(self.attackAngle, 0.9)
           self:setPupilAngle(self.attackAngle, 0.7)
-        elseif self.attackStage == 'cooldown' then
+        elseif self.attackPhase == 'cooldown' then
           self:setEyeWhiteAngle(self.attackAngle, 0.7)
           self:setPupilAngle(self.attackAngle, 0.6)
-        elseif self.attackStage == 'pausing' then
+        elseif self.attackPhase == 'pausing' then
           self:setEyeWhiteAngle(self.attackAngle, 0.4)
           self:setPupilAngle(self.attackAngle, 0.4)
         end
@@ -368,9 +373,9 @@ local ENTITY_CLASSES = {
         local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
         -- Draw eye white
         local eyeFrame = 3
-        if self.attackStage == 'charging' then
+        if self.attackPhase == 'charging' then
           eyeFrame = 4
-        elseif self.attackStage == 'shooting' then
+        elseif self.attackPhase == 'shooting' then
           eyeFrame = 2
         elseif self.blinkFrames > 0 then
           -- local b = math.abs(math.ceil(self.blinkFrames / 2) - 3) -- 2 to 0 to 2
@@ -380,7 +385,7 @@ local ENTITY_CLASSES = {
         -- Draw pupil
         local pupilColor
         local pupilSize
-        if self.attackStage and self.attackStage ~= 'pausing' then
+        if self.attackPhase and self.attackPhase ~= 'pausing' then
           pupilColor = COLOR.RED
           pupilSize = 1.5
         else
@@ -397,13 +402,13 @@ local ENTITY_CLASSES = {
       elseif renderLayer == 5 then
         -- Draw laser
         local pupilX, pupilY = self:getPupilPosition()
-        if self.attackStage and self.targetX and self.targetY then
+        if self.attackPhase and self.targetX and self.targetY then
           love.graphics.setColor(COLOR.RED)
-          if self.attackStage == 'aiming' then
+          if self.attackPhase == 'aiming' then
             drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1, 4, 4)
-          elseif (self.attackStage == 'charging' and self.attackStageFrames % 6 < 2) or self.attackStage == 'cooldown' then
+          elseif (self.attackPhase == 'charging' and self.attackPhaseFrames % 6 < 2) or self.attackPhase == 'cooldown' then
             drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1)
-          elseif self.attackStage == 'shooting' then
+          elseif self.attackPhase == 'shooting' then
             drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 2)
           end
         end
@@ -440,9 +445,9 @@ local ENTITY_CLASSES = {
     attack = function(self, angleOrX, y)
       self.timeUntilBlink = 0.00
       self.blinkFrames = 0
-      self.attackStage = 'aiming'
-      self.attackStageFrames = 0
-      self.timeUntilNextAttackStage = 1.00
+      self.attackPhase = 'aiming'
+      self.attackPhaseFrames = 0
+      self.timeUntilNextAttackPhase = 1.00
       local pupilX, pupilY = self:getPupilPosition()
       if angleOrX and y then
         local dx = angleOrX - pupilX
@@ -500,6 +505,9 @@ local ENTITY_CLASSES = {
 }
 
 function love.load()
+  levelNumber = 3
+  levelPhase = 'doors-opening'
+  levelFrame = 0
   -- Set default filter to nearest to allow crisp pixel art
   love.graphics.setDefaultFilter('nearest', 'nearest')
   -- Load assets
@@ -541,6 +549,18 @@ function love.load()
 end
 
 function love.update(dt)
+  levelFrame = levelFrame + 1
+  if levelPhase == 'doors-opening' and levelFrame > 60 then
+    levelPhase = 'passengers-boarding'
+    levelFrame = 0
+  elseif levelPhase == 'passengers-boarding' and levelFrame > 60 then
+    levelPhase = 'doors-closing'
+    levelFrame = 0
+  elseif levelPhase == 'doors-closing' and levelFrame > 60 then
+    levelNumber = levelNumber + 1
+    levelPhase = 'traveling'
+    levelFrame = 0
+  end
   -- Update entities
   for _, entity in ipairs(entities) do
     entity.framesAlive = entity.framesAlive + 1
@@ -582,7 +602,47 @@ function love.draw()
   love.graphics.clear(COLOR.WHITE)
   -- Draw the background
   drawSprite(1, 1, 300, 183, 0, 9)
-  -- Draw the game
+  -- Draw stop display
+  love.graphics.setColor(COLOR.LIGHT_GREY)
+  love.graphics.rectangle('fill', 116, 20, 71, 1)
+  love.graphics.setColor(COLOR.PURE_WHITE)
+  for i = 1, 8 do
+    local x = 103 + 10 * i
+    local y = 17
+    local stopFrame
+    if i < levelNumber then
+      stopFrame = 3
+    elseif i > levelNumber then
+      stopFrame = 1
+    else
+      stopFrame = 2
+    end
+    drawSprite(240 + 8 * (stopFrame - 1), 185, 7, 7, x, y)
+    local isAtStop = (levelPhase == 'doors-opening' or levelPhase == 'passengers-boarding' or levelPhase == 'doors-closing')
+    if i == levelNumber and (not isAtStop or levelFrame % 60 < 40) then
+      drawSprite(isAtStop and 286 or 264, 185, 21, 7, x - 7, y - 7)
+    end
+  end
+  -- Draw doors
+  local doorSprite
+  if levelPhase == 'doors-opening' then
+    doorSprite = math.min(math.max(1, math.ceil(levelFrame / 7)), 5)
+  elseif levelPhase == 'passengers-boarding' then
+    doorSprite = 5
+  elseif levelPhase == 'doors-closing' then
+    doorSprite = math.min(math.max(0, 6 - math.ceil(levelFrame / 7)), 5)
+  else
+    doorSprite = 0
+  end
+  if doorSprite > 0 then
+    love.graphics.setColor(COLOR.PURE_WHITE)
+    local sx = 1 + 39 * (doorSprite - 1)
+    drawSprite(sx, 379, 38, 33, 60, 32)
+    drawSprite(sx, 379, 38, 33, 202, 32, true)
+    -- drawSprite(sx, 413, 38, 19, 60, 168)
+    -- drawSprite(sx, 413, 38, 19, 202, 168, true)
+  end
+  -- Draw the game state
   love.graphics.push()
   love.graphics.translate(GAME_X, GAME_Y)
   if DEBUG_MODE then
