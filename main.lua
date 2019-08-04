@@ -27,6 +27,79 @@ local LASER_MARGIN = {
   SIDE = 12,
   BOTTOM = 12
 }
+local BADDIE_SPRITES = {
+  { x = -2, y = 13 },
+  { x = 0, y = 5 },
+  { x = 0, y = 22 },
+  { x = 0, y = 7 },
+  { x = 0, y = 3 },
+  { x = -1, y = 9 },
+  { x = 4, y = 12 },
+  { x = 1, y = 13 },
+  { x = -1, y = 19 },
+  { x = 0, y = -2 },
+  { x = 0, y = 8 },
+  { x = 0, y = 14 }
+}
+local SEATS = {
+  { x = 4, y = -6, priority = 1, isSeated = true },
+  { x = 23, y = -6, priority = 1, isSeated = true },
+
+  { x = 46, y = 3, priority = 2 },
+  { x = 65, y = 3, priority = 2 },
+
+  { x = 88, y = -6, priority = 1, isSeated = true },
+  { x = 107, y = -6, priority = 1, isSeated = true },
+  { x = 127, y = -6, priority = 1, isSeated = true },
+  { x = 147, y = -6, priority = 1, isSeated = true },
+  { x = 166, y = -6, priority = 1, isSeated = true },
+
+  { x = 189, y = 3, priority = 2 },
+  { x = 208, y = 3, priority = 2 },
+
+  { x = 231, y = -6, priority = 1, isSeated = true },
+  { x = 250, y = -6, priority = 1, isSeated = true },
+
+  { x = 4, y = 107, priority = 1, isSeated = true },
+  { x = 23, y = 107, priority = 1, isSeated = true },
+
+  { x = 46, y = 100, priority = 2 },
+  { x = 65, y = 100, priority = 2 },
+
+  { x = 88, y = 107, priority = 1, isSeated = true },
+  { x = 107, y = 107, priority = 1, isSeated = true },
+  { x = 127, y = 107, priority = 1, isSeated = true },
+  { x = 147, y = 107, priority = 1, isSeated = true },
+  { x = 166, y = 107, priority = 1, isSeated = true },
+
+  { x = 189, y = 100, priority = 2 },
+  { x = 208, y = 100, priority = 2 },
+
+  { x = 231, y = 107, priority = 1, isSeated = true },
+  { x = 250, y = 107, priority = 1, isSeated = true },
+
+  { x = 7, y = 24, priority = 3 },
+  { x = 7, y = 51, priority = 3 },
+  { x = 7, y = 78, priority = 3 },
+
+  { x = 247, y = 24, priority = 3 },
+  { x = 247, y = 51, priority = 3 },
+  { x = 247, y = 78, priority = 3 },
+
+  { x = 67, y = 51, priority = 4 },
+  { x = 127, y = 51, priority = 4 },
+  { x = 187, y = 51, priority = 4 },
+
+  { x = 37, y = 24, priority = 4 },
+  { x = 97, y = 24, priority = 4 },
+  { x = 157, y = 24, priority = 4 },
+  { x = 217, y = 24, priority = 4 },
+
+  { x = 37, y = 78, priority = 4 },
+  { x = 97, y = 78, priority = 4 },
+  { x = 157, y = 78, priority = 4 },
+  { x = 217, y = 78, priority = 4 },
+}
 
 -- Assets
 local spriteSheet
@@ -41,6 +114,7 @@ local playerControllers
 local levelNumber
 local levelPhase
 local levelFrame
+local numPassengersLeftToBoard
 
 -- Entity variables
 local entities
@@ -48,12 +122,14 @@ local newEntities
 
 -- Entity groups
 local players = {}
+local baddies = {}
 local obstacles = {}
 
 -- Entity classes
 local ENTITY_CLASSES = {
   player = {
     groups = { players, obstacles },
+    health = 100,
     eyeRadius = 5,
     radius = 6,
     facingX = 1.0,
@@ -233,11 +309,11 @@ local ENTITY_CLASSES = {
     end
   },
   baddie = {
-    groups = { obstacles },
+    groups = { baddies, obstacles },
     radius = 5,
     eyeRadius = 5,
     eyeOffsetX = 0,
-    eyeOffsetY = -22,
+    eyeOffsetY = 0,
     eyeWhiteOffsetX = 0,
     eyeWhiteOffsetY = 0,
     timeUntilEyeWhiteUpdate = 0.00,
@@ -254,6 +330,12 @@ local ENTITY_CLASSES = {
     attackAngle = 0,
     targetX = nil,
     targetY = nil,
+    init = function(self)
+      self.bodyFlipped = math.random() < 0.5
+      self.bodySprite = math.random(1, 12)
+      self.eyeOffsetX = (self.bodyFlipped and -1 or 1) * BADDIE_SPRITES[self.bodySprite].x
+      self.eyeOffsetY = -BADDIE_SPRITES[self.bodySprite].y
+    end,
     update = function(self, dt)
       -- Advance attack stages
       if self.attackPhase then
@@ -357,13 +439,14 @@ local ENTITY_CLASSES = {
     end,
     draw = function(self, renderLayer)
       if renderLayer == 1 then
-        -- Draw shadow
-        local shadowSprite = 5
-        drawSprite(100 + 20 * (shadowSprite - 1), 185, 19, 7, self.x - 9.5, self.y - 2)
+        if not self.seat.isSeated then
+          -- Draw shadow
+          local shadowSprite = 5
+          drawSprite(100 + 20 * (shadowSprite - 1), 185, 19, 7, self.x - 9.5, self.y - 2)
+        end
       elseif renderLayer == 3 then
         -- Draw body
-        local bodyFrame = 3
-        drawSprite(24 * (bodyFrame - 1) + 1, 193, 23, 36, self.x - 11.5, self.y - 28)
+        drawSprite(24 * (self.bodySprite - 1) + 1, 193, 23, 36, self.x - 11.5, self.y - 28, self.bodyFlipped)
         if DEBUG_MODE then
           love.graphics.setColor(COLOR.DEBUG_BLUE)
           love.graphics.circle('line', self.x, self.y, self.radius)
@@ -384,13 +467,11 @@ local ENTITY_CLASSES = {
         drawSprite(11 * (eyeFrame - 1) + 1, 185, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3.5)
         -- Draw pupil
         local pupilColor
-        local pupilSize
+        local pupilSize = 1.5
         if self.attackPhase and self.attackPhase ~= 'pausing' then
           pupilColor = COLOR.RED
-          pupilSize = 1.5
         else
           pupilColor = COLOR.DARK_GREY
-          pupilSize = 1
         end
         love.graphics.setColor(pupilColor)
         love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
@@ -523,43 +604,62 @@ function love.load()
   spawnEntity('player', {
     playerNum = 1,
     color = COLOR.PURPLE,
-    x = 150,
-    y = 50
+    x = GAME_WIDTH / 2 - 25,
+    y = GAME_HEIGHT / 2
   })
   spawnEntity('player', {
     playerNum = 2,
     color = COLOR.GREEN,
-    x = 100,
-    y = 50
-  })
-  local baddie = spawnEntity('baddie', {
-    x = 200,
-    y = 75
-  })
-  spawnEntity('baddie', {
-    x = 0,
-    y = 0
-  })
-  spawnEntity('baddie', {
-    x = 0,
-    y = 100
+    x = GAME_WIDTH / 2 + 25,
+    y = GAME_HEIGHT / 2
   })
   addNewEntitiesToGame()
-  baddie:attack()
 end
 
 function love.update(dt)
+  -- Update level phase
   levelFrame = levelFrame + 1
   if levelPhase == 'doors-opening' and levelFrame > 60 then
     levelPhase = 'passengers-boarding'
     levelFrame = 0
-  elseif levelPhase == 'passengers-boarding' and levelFrame > 60 then
+    numPassengersLeftToBoard = 10
+    for _, seat in ipairs(SEATS) do
+      seat.passenger = nil
+    end
+  elseif levelPhase == 'passengers-boarding' and numPassengersLeftToBoard <= 0 then
     levelPhase = 'doors-closing'
     levelFrame = 0
   elseif levelPhase == 'doors-closing' and levelFrame > 60 then
     levelNumber = levelNumber + 1
     levelPhase = 'traveling'
     levelFrame = 0
+  end
+  -- Spawn passengers
+  if levelPhase == 'passengers-boarding' and levelFrame % 10 == 0 and numPassengersLeftToBoard > 0 then
+    -- Select a random seat
+    local maxPriority = 1
+    for attempt = 1, 100 do
+      maxPriority = maxPriority + 0.3
+      local seatNum = math.random(1, #SEATS)
+      local seat = SEATS[seatNum]
+      local priority = seat.priority
+      if seatNum > 1 and SEATS[seatNum - 1].passenger then
+        priority = priority + 2
+      end
+      if seatNum < #SEATS and SEATS[seatNum + 1].passenger then
+        priority = priority + 2
+      end
+      if not seat.passenger and priority <= maxPriority then
+        -- Spawn a passenger in that seat
+        numPassengersLeftToBoard = numPassengersLeftToBoard - 1
+        seat.passenger = spawnEntity('baddie', {
+          x = seat.x,
+          y = seat.y,
+          seat = seat
+        })
+        break
+      end
+    end
   end
   -- Update entities
   for _, entity in ipairs(entities) do
@@ -598,29 +698,40 @@ function love.update(dt)
 end
 
 function love.draw()
+  local isAtStop = (levelPhase == 'doors-opening' or levelPhase == 'passengers-boarding' or levelPhase == 'doors-closing')
+  local playerMissingHealth = (players[1].health < 90 or players[2].health < 90)
+  local shouldDrawHealthBars = playerMissingHealth and (isAtStop or levelFrame % 280 > 140)
   -- Clear the screen
   love.graphics.clear(COLOR.WHITE)
   -- Draw the background
   drawSprite(1, 1, 300, 183, 0, 9)
+  -- Draw player health
+  if shouldDrawHealthBars then
+    drawSprite(196, 379, 90, 11, 106, 12)
+    love.graphics.setColor(players[1].color)
+    love.graphics.rectangle('fill', 117, 17, math.ceil(30 * players[1].health / 100), 5)
+    love.graphics.setColor(players[2].color)
+    love.graphics.rectangle('fill', 165, 17, math.ceil(30 * players[2].health / 100), 5)
   -- Draw stop display
-  love.graphics.setColor(COLOR.LIGHT_GREY)
-  love.graphics.rectangle('fill', 116, 20, 71, 1)
-  love.graphics.setColor(COLOR.PURE_WHITE)
-  for i = 1, 8 do
-    local x = 103 + 10 * i
-    local y = 17
-    local stopFrame
-    if i < levelNumber then
-      stopFrame = 3
-    elseif i > levelNumber then
-      stopFrame = 1
-    else
-      stopFrame = 2
-    end
-    drawSprite(240 + 8 * (stopFrame - 1), 185, 7, 7, x, y)
-    local isAtStop = (levelPhase == 'doors-opening' or levelPhase == 'passengers-boarding' or levelPhase == 'doors-closing')
-    if i == levelNumber and (not isAtStop or levelFrame % 60 < 40) then
-      drawSprite(isAtStop and 286 or 264, 185, 21, 7, x - 7, y - 7)
+  else
+    love.graphics.setColor(COLOR.LIGHT_GREY)
+    love.graphics.rectangle('fill', 116, 20, 71, 1)
+    love.graphics.setColor(COLOR.PURE_WHITE)
+    for i = 1, 8 do
+      local x = 103 + 10 * i
+      local y = 17
+      local stopFrame
+      if i < levelNumber then
+        stopFrame = 3
+      elseif i > levelNumber then
+        stopFrame = 1
+      else
+        stopFrame = 2
+      end
+      drawSprite(240 + 8 * (stopFrame - 1), 185, 7, 7, x, y)
+      if i == levelNumber and (not isAtStop or levelFrame % 60 < 40) then
+        drawSprite(isAtStop and 286 or 264, 185, 21, 7, x - 7, y - 7)
+      end
     end
   end
   -- Draw doors
