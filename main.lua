@@ -1,7 +1,8 @@
 local Controllers = require('src/Controller.lua')
 
 -- Constants
-local DEBUG_MODE = false
+local DEBUG_DRAW_MODE = false
+local DEBUG_SPEED_MODE = true
 local COLOR = {
   LIGHT_GREY = { 191 / 255, 190 / 255, 190 / 255 }, -- #bfbebe
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
@@ -305,7 +306,7 @@ local ENTITY_CLASSES = {
         -- Draw body
         love.graphics.setColor(COLOR.PURE_WHITE)
         drawSprite(1, self.color == COLOR.PURPLE and 341 or 360, 23, 18, self.x - 12.5, self.y - 11)
-        if DEBUG_MODE then
+        if DEBUG_DRAW_MODE then
           love.graphics.setColor(COLOR.DEBUG_BLUE)
           love.graphics.circle('line', self.x, self.y, self.radius)
         end
@@ -325,7 +326,7 @@ local ENTITY_CLASSES = {
         local pupilX, pupilY = self:getPupilPosition()
         love.graphics.setColor(self.color)
         love.graphics.rectangle('fill', pupilX - 0.5, pupilY - 0.5, 1, 1)
-        if DEBUG_MODE then
+        if DEBUG_DRAW_MODE then
           local eyeX, eyeY = self:getEyePosition()
           love.graphics.setColor(COLOR.DEBUG_GREEN)
           love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
@@ -368,6 +369,7 @@ local ENTITY_CLASSES = {
     attackAngle = 0,
     targetX = nil,
     targetY = nil,
+    timeSpentTargeted = 0.00,
     init = function(self)
       self.bodySprite = math.random(1, 48)
       self.bodyFlipped = math.random() < 0.5
@@ -477,8 +479,58 @@ local ENTITY_CLASSES = {
           self.blinkFrames = 11
         end
       end
+      -- Spawn poofs every so often while being targeted at
+      if self.isBeingTargeted and self.framesAlive % 5 == 0 then
+        local eyeX, eyeY = self:getEyePosition()
+        spawnEntity('poof', {
+          x = eyeX,
+          y = eyeY,
+          size = 3,
+          angle = 2 * math.pi * math.random(),
+          duration = 0.25 + 0.10 * math.random(),
+          speed = 100 + 100 * math.random()
+        })
+      end
+      -- Destroy if stared at for too long
+      self.timeSpentTargeted = math.max(0.00, self.timeSpentTargeted + (self.isBeingTargeted and dt or -dt / 4))
+      if self.timeSpentTargeted > 1.00 then
+        self:destroy()
+        local playerPupilX, playerPupilY = closestPlayer:getPupilPosition()
+        local eyeX, eyeY = self:getEyePosition()
+        local dx = eyeX - playerPupilX
+        local dy = eyeY - playerPupilY
+        local angle = math.atan2(dy, dx)
+        for i = 1, 25 do
+          local size = math.random(1, 5)
+          spawnEntity('poof', {
+            x = eyeX,
+            y = eyeY,
+            size = size,
+            duration = 0.25 + 0.04 * size + 0.18 * math.random(),
+            angle = 2 * math.pi * math.random(),
+            speed = (1.2 - size / 5) * (300 + 300 * math.random())
+          })
+        end
+        for i = 1, 25 do
+          local size = math.random(1, 5)
+          spawnEntity('poof', {
+            x = eyeX,
+            y = eyeY,
+            size = size,
+            friction = 0.08,
+            duration = 0.2 + 0.03 * size + 0.15 * math.random(),
+            angle = angle + 0.9 * math.random() - 0.45,
+            speed = (1.2 - size / 5) * (500 + 500 * math.random())
+          })
+        end
+      end
     end,
     draw = function(self, renderLayer)
+      local offsetX = 0
+      local offsetY = 0
+      if self.isBeingTargeted then
+        offsetX = (math.floor((self.framesAlive % 3)) - 1) * math.max(0.2, 2.2 * self.timeSpentTargeted - 0.4)
+      end
       if renderLayer == 1 then
         if not self.seat.isSeated then
           -- Draw shadow
@@ -486,8 +538,8 @@ local ENTITY_CLASSES = {
         end
       elseif renderLayer == 3 then
         -- Draw body
-        drawSprite(1 + 24 * ((self.bodySprite - 1) % 12), 193 + 37 * math.floor((self.bodySprite - 1) / 12), 23, 36, self.x - 11.5, self.y - 28, self.bodyFlipped)
-        if DEBUG_MODE then
+        drawSprite(1 + 24 * ((self.bodySprite - 1) % 12), 193 + 37 * math.floor((self.bodySprite - 1) / 12), 23, 36, self.x - 11.5 + offsetX, self.y - 28 + offsetY, self.bodyFlipped)
+        if DEBUG_DRAW_MODE then
           love.graphics.setColor(COLOR.DEBUG_BLUE)
           love.graphics.circle('line', self.x, self.y, self.radius)
         end
@@ -504,7 +556,7 @@ local ENTITY_CLASSES = {
           -- local b = math.abs(math.ceil(self.blinkFrames / 2) - 3) -- 2 to 0 to 2
           eyeFrame = 6 - math.abs(math.ceil(self.blinkFrames / 2) - 3)
         end
-        drawSprite(11 * (eyeFrame - 1) + 1, 185, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3.5)
+        drawSprite(11 * (eyeFrame - 1) + 1, 185, 10, 7, eyeWhiteX - 5 + offsetX, eyeWhiteY - 3.5 + offsetY)
         -- Draw pupil
         local pupilColor
         local pupilSize = 1.5
@@ -515,7 +567,7 @@ local ENTITY_CLASSES = {
         end
         love.graphics.setColor(pupilColor)
         love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
-        if DEBUG_MODE then
+        if DEBUG_DRAW_MODE then
           local eyeX, eyeY = self:getEyePosition()
           love.graphics.setColor(COLOR.DEBUG_GREEN)
           love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
@@ -622,6 +674,45 @@ local ENTITY_CLASSES = {
         self.targetY = GAME_HEIGHT + LASER_MARGIN.BOTTOM
       end
     end
+  },
+  poof = {
+    renderLayer = 3,
+    friction = 0.15,
+    duration = 0.30,
+    size = 1,
+    init = function(self)
+      if self.angle and self.speed then
+        self.vx = self.speed * math.cos(self.angle)
+        self.vy = self.speed * math.sin(self.angle)
+        self.x = self.x + self.vx / 30
+        self.y = self.y + self.vy / 30
+      end
+    end,
+    update = function(self, dt)
+      self.vx = self.vx * (1 - self.friction)
+      self.vy = self.vy * (1 - self.friction)
+      self:applyVelocity(dt)
+      if self.x < -LASER_MARGIN.SIDE then
+        self.vx = math.abs(self.vx)
+      end
+      if self.x > GAME_WIDTH + LASER_MARGIN.SIDE then
+        self.vx = -math.abs(self.vx)
+      end
+      if self.y < -LASER_MARGIN.TOP then
+        self.vy = math.abs(self.vy)
+      end
+      if self.y > GAME_HEIGHT + LASER_MARGIN.BOTTOM then
+        self.vy = -math.abs(self.vy)
+      end
+      if self.timeAlive > self.duration then
+        self:destroy()
+      end
+    end,
+    draw = function(self)
+      local size = math.min(math.max(1, math.ceil(self.size * (1 - (self.timeAlive / self.duration)))), 5)
+      local poofSprite = 6 - size
+      drawSprite(196 + 10 * (poofSprite - 1), 391, 9, 9, self.x - 4.5, self.y - 4.5)
+    end
   }
 }
 
@@ -659,23 +750,23 @@ end
 function love.update(dt)
   -- Update level phase
   levelFrame = levelFrame + 1
-  if levelPhase == 'doors-opening' and levelFrame > 0 then -- 60 then
+  if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
     levelPhase = 'passengers-boarding'
     levelFrame = 0
-    numPassengersLeftToBoard = 43
+    numPassengersLeftToBoard = 10
     for _, seat in ipairs(SEATS) do
       seat.passenger = nil
     end
   elseif levelPhase == 'passengers-boarding' and numPassengersLeftToBoard <= 0 then
     levelPhase = 'doors-closing'
     levelFrame = 0
-  elseif levelPhase == 'doors-closing' and levelFrame > 60 then
+  elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
     levelNumber = levelNumber + 1
     levelPhase = 'traveling'
     levelFrame = 0
   end
   -- Spawn passengers
-  if levelPhase == 'passengers-boarding' and levelFrame % 10 == 0 and numPassengersLeftToBoard > 0 then
+  if levelPhase == 'passengers-boarding' and levelFrame % (DEBUG_SPEED_MODE and 1 or 10) == 0 and numPassengersLeftToBoard > 0 then
     -- Select a random seat
     local maxPriority = 1
     for attempt = 1, 100 do
@@ -796,7 +887,7 @@ function love.draw()
   -- Draw the game state
   love.graphics.push()
   love.graphics.translate(GAME_X, GAME_Y)
-  if DEBUG_MODE then
+  if DEBUG_DRAW_MODE then
     love.graphics.setColor(COLOR.DEBUG_BLUE)
     love.graphics.rectangle('line', 0, 0, GAME_WIDTH, GAME_HEIGHT)
   end
