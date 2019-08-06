@@ -19,9 +19,10 @@ local GAME_Y = 64
 local GAME_WIDTH = 254
 local GAME_HEIGHT = 105
 local PLAYER_MOVE_SPEED = 60
-local PLAYER_DASH_SPEED = 600
-local PLAYER_DASH_FRICTION = 0.15
-local PLAYER_DASH_DURATION = 0.25
+local PLAYER_DASH_SPEED = 1000
+local PLAYER_DASH_FRICTION = 0.30
+local PLAYER_DASH_DURATION = 0.20
+local PLAYER_DASH_INVINCIBILITY = 0.12
 local PLAYER_DASH_COOLDOWN = 0.10
 local LASER_MARGIN = {
   TOP = 24,
@@ -175,7 +176,7 @@ local ENTITY_CLASSES = {
     health = 100,
     delayedHealth = 100,
     framesSinceHealthChanged = 999,
-    eyeRadius = 4,
+    eyeRadius = 3,
     radius = 6,
     facingX = 1.0,
     facingY = 0.0,
@@ -225,6 +226,7 @@ local ENTITY_CLASSES = {
       if controller:justStartedDashing() and self.dashCooldown <= 0.00 and self.damageFrames <= 0 then
         self.isAiming = false
         self.isDashing = true
+        self.invincibilityFrames = math.max(60 * PLAYER_DASH_INVINCIBILITY, self.invincibilityFrames)
         self.dashDuration = PLAYER_DASH_DURATION
         self.dashCooldown = PLAYER_DASH_DURATION + PLAYER_DASH_COOLDOWN
         self.vx = PLAYER_DASH_SPEED * self.facingX
@@ -316,7 +318,7 @@ local ENTITY_CLASSES = {
       self.pupilOffsetY = self.aimY
     end,
     draw = function(self, renderLayer)
-      local drawCharacter = (self.damageFrames > 0 or self.invincibilityFrames % 10 < 5)
+      local drawCharacter = (self.damageFrames > 0 or self.isDashing or self.invincibilityFrames % 10 < 5)
       if renderLayer == 1 then
         -- Draw shadow
         local shadowSprite = 5
@@ -495,7 +497,7 @@ local ENTITY_CLASSES = {
         self:calculateTarget()
       else
         local eyeX, eyeY = self:getEyePosition()
-        local playerEyeX, playerEyeY = closestPlayer:getEyePosition()
+        local playerEyeX, playerEyeY = closestPlayer:getEyeWhitePosition()
         local dx = playerEyeX - eyeX
         local dy = playerEyeY - eyeY
         local dist = math.sqrt(dx * dx + dy * dy)
@@ -691,8 +693,9 @@ local ENTITY_CLASSES = {
         self.attackAngle = angleOrX
       else
         local target = self:getClosestPlayer()
-        local dx = target.x - pupilX
-        local dy = target.y - pupilY
+        local targetEyeX, targetEyeY = target:getEyeWhitePosition()
+        local dx = targetEyeX - pupilX
+        local dy = targetEyeY - pupilY
         self.attackAngle = math.atan2(dy, dx)
       end
       self:calculateTarget()
