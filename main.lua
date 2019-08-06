@@ -156,6 +156,8 @@ local levelPhase
 local levelFrame
 local numPassengersLeftToBoard
 local laserSchedule
+local shakeFrames
+local freezeFrames
 
 -- Entity variables
 local entities
@@ -171,7 +173,7 @@ local ENTITY_CLASSES = {
   player = {
     groups = { players, obstacles },
     health = 100,
-    eyeRadius = 5,
+    eyeRadius = 4,
     radius = 6,
     facingX = 1.0,
     facingY = 0.0,
@@ -189,7 +191,11 @@ local ENTITY_CLASSES = {
     eyeWhiteOffsetY = 0,
     pupilOffsetX = 0,
     pupilOffsetY = 0,
+    invincibilityFrames = 0,
+    damageFrames = 0,
     update = function(self, dt)
+      self.damageFrames = math.max(0, self.damageFrames - 1)
+      self.invincibilityFrames = math.max(0, self.invincibilityFrames - 1)
       local controller = self:getController()
       -- Calculate player facing
       local moveX, moveY, moveMagnitude = controller:getMoveDirection()
@@ -205,7 +211,7 @@ local ENTITY_CLASSES = {
           self.isDashing = false
         end
       end
-      if controller:justStartedDashing() and self.dashCooldown <= 0.00 then
+      if controller:justStartedDashing() and self.dashCooldown <= 0.00 and self.damageFrames <= 0 then
         self.isAiming = false
         self.isDashing = true
         self.dashDuration = PLAYER_DASH_DURATION
@@ -214,13 +220,13 @@ local ENTITY_CLASSES = {
         self.vy = PLAYER_DASH_SPEED * self.facingY
       end
       -- Determine whether the player is aiming
-      self.isAiming = controller:isAiming() and not self.isDashing
+      self.isAiming = controller:isAiming() and not self.isDashing and self.damageFrames <= 0
       -- Move the player
       if self.isDashing then
         self.vx = self.vx * (1 - PLAYER_DASH_FRICTION)
         self.vy = self.vy * (1 - PLAYER_DASH_FRICTION)
       else
-        local speed = self.isAiming and 0 or PLAYER_MOVE_SPEED
+        local speed = (self.isAiming or self.damageFrames > 0) and 0 or PLAYER_MOVE_SPEED
         self.vx = speed * moveX * moveMagnitude
         self.vy = speed * moveY * moveMagnitude
       end
@@ -299,11 +305,12 @@ local ENTITY_CLASSES = {
       self.pupilOffsetY = self.aimY
     end,
     draw = function(self, renderLayer)
+      local drawCharacter = (self.damageFrames > 0 or self.invincibilityFrames % 10 < 5)
       if renderLayer == 1 then
         -- Draw shadow
         local shadowSprite = 5
         drawSprite(100 + 20 * (shadowSprite - 1), 185, 19, 7, self.x - 9.5, self.y - 1)
-      elseif renderLayer == 3 then
+      elseif renderLayer == 3 and drawCharacter then
         -- Draw body
         love.graphics.setColor(COLOR.PURE_WHITE)
         drawSprite(1, self.color == COLOR.PURPLE and 341 or 360, 23, 18, self.x - 12.5, self.y - 11)
@@ -318,17 +325,17 @@ local ENTITY_CLASSES = {
           love.graphics.setColor(self.color)
           drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY)
         end
-      elseif renderLayer == 5 then
+      elseif renderLayer == 6 and drawCharacter then
         -- Draw eye
         love.graphics.setColor(COLOR.PURE_WHITE)
         local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
-        local eyeFrame = 3
+        local eyeFrame = self.damageFrames > 0 and 2 or 3
         drawSprite(56 + 11 * (eyeFrame - 1), 185, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3)
         local pupilX, pupilY = self:getPupilPosition()
         love.graphics.setColor(self.color)
         love.graphics.rectangle('fill', pupilX - 0.5, pupilY - 0.5, 1, 1)
         if DEBUG_DRAW_MODE then
-          local eyeX, eyeY = self:getEyePosition()
+          local eyeX, eyeY = self:getEyeWhitePosition()
           love.graphics.setColor(COLOR.DEBUG_GREEN)
           love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
         end
@@ -342,11 +349,34 @@ local ENTITY_CLASSES = {
     end,
     getEyeWhitePosition = function(self)
       local x, y = self:getEyePosition()
-      return x + self.eyeWhiteOffsetX, y + self.eyeWhiteOffsetY
+      local offsetX, offsetY = self.eyeWhiteOffsetX, self.eyeWhiteOffsetY
+      if self.damageFrames > 0 then
+        offsetX, offsetY = 0, 0
+      end
+      return x + offsetX, y + offsetY
     end,
     getPupilPosition = function(self)
       local x, y = self:getEyeWhitePosition()
-      return x + self.pupilOffsetX, y + self.pupilOffsetY
+      local offsetX, offsetY = self.pupilOffsetX, self.pupilOffsetY
+      if self.damageFrames > 0 then
+        offsetX, offsetY = 0, 0
+      end
+      return x + offsetX, y + offsetY
+    end,
+    canBeDamaged = function(self)
+      return self.invincibilityFrames <= 0
+    end,
+    damage = function(self)
+      if self:canBeDamaged() then
+        shakeFrames = math.max(shakeFrames, 25)
+        freezeFrames = math.max(freezeFrames, 3)
+        self.isAiming = false
+        self.isDashing = false
+        self.vx = 0
+        self.vy = 0
+        self.damageFrames = 45
+        self.invincibilityFrames = 120
+      end
     end
   },
   baddie = {
@@ -392,11 +422,12 @@ local ENTITY_CLASSES = {
             self.attackPhase = 'charging'
             self.framesUntilNextAttackPhase = 15
           elseif self.attackPhase == 'charging' then
+            shakeFrames = math.max(2, shakeFrames)
             self.attackPhase = 'shooting'
             self.framesUntilNextAttackPhase = self.shootFrames
           elseif self.attackPhase == 'shooting' then
             self.attackPhase = 'cooldown'
-            self.framesUntilNextAttackPhase = 6
+            self.framesUntilNextAttackPhase = 7
           elseif self.attackPhase == 'cooldown' then
             self.attackPhase = 'pausing'
             self.framesUntilNextAttackPhase = 45
@@ -481,7 +512,20 @@ local ENTITY_CLASSES = {
           self.blinkFrames = 11
         end
       end
-      -- Spawn poofs every so often while being targeted at
+      -- Damage players
+      if self.attackPhase == 'shooting' then
+        local pupilX, pupilY = self:getPupilPosition()
+        for _, player in ipairs(players) do
+          if player:canBeDamaged() then
+            local playerEyeWhiteX, playerEyeWhiteY = player:getEyeWhitePosition()
+            local isIntersecting = calcCircleLineIntersection(pupilX, pupilY, self.targetX, self.targetY, playerEyeWhiteX, playerEyeWhiteY, player.eyeRadius)
+            if isIntersecting then
+              player:damage()
+            end
+          end
+        end
+      end
+      -- Spawn poofs every so often while being targeted
       if self.isBeingTargeted and self.framesAlive % 5 == 0 then
         local eyeX, eyeY = self:getEyePosition()
         spawnEntity('poof', {
@@ -493,10 +537,11 @@ local ENTITY_CLASSES = {
           speed = 100 + 100 * math.random()
         })
       end
-      -- Destroy if stared at for too long
+      -- Destroy if targeted for too long
       self.timeSpentTargeted = math.max(0.00, self.timeSpentTargeted + (self.isBeingTargeted and dt or -dt / 4))
       if self.timeSpentTargeted > 1.00 then
         self:destroy()
+        shakeFrames = math.max(8, shakeFrames)
         local playerPupilX, playerPupilY = closestPlayer:getPupilPosition()
         local eyeX, eyeY = self:getEyePosition()
         local dx = eyeX - playerPupilX
@@ -623,7 +668,7 @@ local ENTITY_CLASSES = {
       self.blinkFrames = 0
       self.attackPhase = 'aiming'
       self.attackPhaseFrames = 0
-      self.framesUntilNextAttackPhase = aimFrames
+      self.framesUntilNextAttackPhase = aimFrames - 14
       local pupilX, pupilY = self:getPupilPosition()
       if angleOrX and y then
         local dx = angleOrX - pupilX
@@ -721,6 +766,8 @@ local ENTITY_CLASSES = {
 
 function love.load()
   laserSchedule = {}
+  shakeFrames = 0
+  freezeFrames = 0
   beatRate = 30
   levelNumber = 3
   levelPhase = 'doors-opening'
@@ -743,16 +790,21 @@ function love.load()
     x = GAME_WIDTH / 2 - 25,
     y = GAME_HEIGHT / 2
   })
-  spawnEntity('player', {
-    playerNum = 2,
-    color = COLOR.GREEN,
-    x = GAME_WIDTH / 2 + 25,
-    y = GAME_HEIGHT / 2
-  })
+  -- spawnEntity('player', {
+  --   playerNum = 2,
+  --   color = COLOR.GREEN,
+  --   x = GAME_WIDTH / 2 + 25,
+  --   y = GAME_HEIGHT / 2
+  -- })
   addNewEntitiesToGame()
 end
 
 function love.update(dt)
+  if freezeFrames > 0 then
+    freezeFrames = math.max(0, freezeFrames - 1)
+    return
+  end
+  shakeFrames = math.max(0, shakeFrames - 1)
   -- Update level phase
   levelFrame = levelFrame + 1
   if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
@@ -778,7 +830,7 @@ function love.update(dt)
       if task.pause <= 0 then
         local baddie = getRandomBaddie()
         if baddie then
-          baddie:attack(task.charge - 14, task.shoot)
+          baddie:attack(task.charge, task.shoot)
         end
         table.remove(laserSchedule, 1)
       end
@@ -855,20 +907,31 @@ function love.update(dt)
 end
 
 function love.draw()
+  local screenShakeX = 0
+  if shakeFrames > 0 and freezeFrames <= 0 then
+    local maginitude = math.min(math.max(0.12, shakeFrames / 6), 1.75)
+    screenShakeX = maginitude * (2 * (levelFrame % 2) - 1)
+  end
   local isAtStop = (levelPhase == 'doors-opening' or levelPhase == 'passengers-boarding' or levelPhase == 'doors-closing')
-  local playerMissingHealth = (players[1].health < 90 or players[2].health < 90)
+  local playerMissingHealth = (players[1] and players[1].health < 90) or (players[2] and players[2].health < 90)
   local shouldDrawHealthBars = playerMissingHealth and (isAtStop or levelFrame % 280 > 140)
   -- Clear the screen
   love.graphics.clear(COLOR.WHITE)
   -- Draw the background
+  love.graphics.push()
+  love.graphics.translate(screenShakeX, 0)
   drawSprite(1, 1, 300, 183, 0, 9)
   -- Draw player health
   if shouldDrawHealthBars then
     drawSprite(196, 379, 90, 11, 106, 12)
-    love.graphics.setColor(players[1].color)
-    love.graphics.rectangle('fill', 117, 17, math.ceil(30 * players[1].health / 100), 5)
-    love.graphics.setColor(players[2].color)
-    love.graphics.rectangle('fill', 165, 17, math.ceil(30 * players[2].health / 100), 5)
+    if players[1] then
+      love.graphics.setColor(players[1].color)
+      love.graphics.rectangle('fill', 117, 17, math.ceil(30 * players[1].health / 100), 5)
+    end
+    if players[2] then
+      love.graphics.setColor(players[2].color)
+      love.graphics.rectangle('fill', 165, 17, math.ceil(30 * players[2].health / 100), 5)
+    end
   -- Draw stop display
   else
     love.graphics.setColor(COLOR.LIGHT_GREY)
@@ -910,9 +973,10 @@ function love.draw()
     -- drawSprite(sx, 413, 38, 19, 60, 168)
     -- drawSprite(sx, 413, 38, 19, 202, 168, true)
   end
+  love.graphics.pop()
   -- Draw the game state
   love.graphics.push()
-  love.graphics.translate(GAME_X, GAME_Y)
+  love.graphics.translate(GAME_X + screenShakeX, GAME_Y)
   if DEBUG_DRAW_MODE then
     love.graphics.setColor(COLOR.DEBUG_BLUE)
     love.graphics.rectangle('line', 0, 0, GAME_WIDTH, GAME_HEIGHT)
@@ -1053,11 +1117,11 @@ function drawSprite(sx, sy, sw, sh, x, y, flipHorizontal, flipVertical, rotation
 end
 
 function getRandomBaddie()
-  local j = math.random(1, #baddies)
+  local j = math.random(0, #baddies - 1)
   local targetedBaddie
   for i = 1, #baddies do
-    local baddie = baddies[(i + j) % #baddies + 1]
-    if not baddie.attackPhase then
+    local baddie = baddies[((i + j) % #baddies) + 1]
+    if not baddie.attackPhase or baddie.attackPhase == 'pausing' then
       if baddie.isBeingTargeted then
         targetedBaddie = baddie
       else
