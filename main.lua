@@ -155,6 +155,7 @@ local levelNumber
 local levelPhase
 local levelFrame
 local numPassengersLeftToBoard
+local laserSchedule
 
 -- Entity variables
 local entities
@@ -365,7 +366,8 @@ local ENTITY_CLASSES = {
     isBeingTargeted = false,
     attackPhase = nil,
     attackPhaseFrames = 0,
-    timeUntilNextAttackPhase = 0.00,
+    shootFrames = 60,
+    framesUntilNextAttackPhase = 0,
     attackAngle = 0,
     targetX = nil,
     targetY = nil,
@@ -383,21 +385,21 @@ local ENTITY_CLASSES = {
       -- Advance attack stages
       if self.attackPhase then
         self.attackPhaseFrames = self.attackPhaseFrames + 1
-        self.timeUntilNextAttackPhase = self.timeUntilNextAttackPhase - dt
-        if self.timeUntilNextAttackPhase <= 0.00 then
+        self.framesUntilNextAttackPhase = self.framesUntilNextAttackPhase - 1
+        if self.framesUntilNextAttackPhase <= 0 then
           self.attackPhaseFrames = 0
           if self.attackPhase == 'aiming' then
             self.attackPhase = 'charging'
-            self.timeUntilNextAttackPhase = 0.25
+            self.framesUntilNextAttackPhase = 15
           elseif self.attackPhase == 'charging' then
             self.attackPhase = 'shooting'
-            self.timeUntilNextAttackPhase = 2.00
+            self.framesUntilNextAttackPhase = self.shootFrames
           elseif self.attackPhase == 'shooting' then
             self.attackPhase = 'cooldown'
-            self.timeUntilNextAttackPhase = 0.10
+            self.framesUntilNextAttackPhase = 6
           elseif self.attackPhase == 'cooldown' then
             self.attackPhase = 'pausing'
-            self.timeUntilNextAttackPhase = 0.75
+            self.framesUntilNextAttackPhase = 45
           elseif self.attackPhase == 'pausing' then
             self.attackPhase = nil
           end
@@ -615,12 +617,13 @@ local ENTITY_CLASSES = {
       end
       return closestPlayer
     end,
-    attack = function(self, angleOrX, y)
+    attack = function(self, aimFrames, shootFrames, angleOrX, y)
+      self.shootFrames = shootFrames
       self.timeUntilBlink = 0.00
       self.blinkFrames = 0
       self.attackPhase = 'aiming'
       self.attackPhaseFrames = 0
-      self.timeUntilNextAttackPhase = 1.00
+      self.framesUntilNextAttackPhase = aimFrames
       local pupilX, pupilY = self:getPupilPosition()
       if angleOrX and y then
         local dx = angleOrX - pupilX
@@ -717,6 +720,8 @@ local ENTITY_CLASSES = {
 }
 
 function love.load()
+  laserSchedule = {}
+  beatRate = 30
   levelNumber = 3
   levelPhase = 'doors-opening'
   levelFrame = 0
@@ -762,8 +767,29 @@ function love.update(dt)
     levelFrame = 0
   elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
     levelNumber = levelNumber + 1
-    levelPhase = 'traveling'
+    levelPhase = 'in-transit'
     levelFrame = 0
+  end
+  -- Schedule lasers
+  if levelPhase == 'in-transit' then
+    if #laserSchedule > 0 then
+      local task = laserSchedule[1]
+      task.pause = task.pause - 1
+      if task.pause <= 0 then
+        local baddie = getRandomBaddie()
+        if baddie then
+          baddie:attack(task.charge - 14, task.shoot)
+        end
+        table.remove(laserSchedule, 1)
+      end
+    end
+    if #laserSchedule <= 0 then
+      laserSchedule = {
+        { pause = 120, charge = 60, shoot = 90 },
+        { pause = 30, charge = 60, shoot = 60 },
+        { pause = 30, charge = 60, shoot = 30 }
+      }
+    end
   end
   -- Spawn passengers
   if levelPhase == 'passengers-boarding' and levelFrame % (DEBUG_SPEED_MODE and 1 or 10) == 0 and numPassengersLeftToBoard > 0 then
@@ -1024,6 +1050,22 @@ function drawSprite(sx, sy, sw, sh, x, y, flipHorizontal, flipVertical, rotation
     rotation or 0,
     flipHorizontal and -1 or 1, flipVertical and -1 or 1,
     sw / 2, sh / 2)
+end
+
+function getRandomBaddie()
+  local j = math.random(1, #baddies)
+  local targetedBaddie
+  for i = 1, #baddies do
+    local baddie = baddies[(i + j) % #baddies + 1]
+    if not baddie.attackPhase then
+      if baddie.isBeingTargeted then
+        targetedBaddie = baddie
+      else
+        return baddie
+      end
+    end
+  end
+  return targetedBaddie
 end
 
 -- Moves two circular entities apart so they're not overlapping
