@@ -2,7 +2,7 @@ local Controllers = require('src/Controller.lua')
 
 -- Constants
 local DEBUG_DRAW_MODE = false
-local DEBUG_SPEED_MODE = false
+local DEBUG_SPEED_MODE = true
 local COLOR = {
   LIGHT_GREY = { 191 / 255, 190 / 255, 190 / 255 }, -- #bfbebe
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
@@ -144,13 +144,33 @@ local SEATS = {
 local LEVELS = {
   {
     numPassengers = 10,
+    doors = 'top',
+    quarterBeat = 15,
     defaultAttributes = {
-      baddie = 'leftmost'
+      baddieMethod = 'random',
+      angleSpread = 0.2
     },
     pattern = {
-      { pause = 120, charge = 60, shoot = 90 },
-      { pause = 30,  charge = 60, shoot = 60 },
-      { pause = 30,  charge = 60, shoot = 30 }
+      { pause = 2, charge = 8, shoot = 6, angleSpread = 0 },
+      { pause = 2, charge = 6, shoot = 6 },
+      { pause = 2, charge = 6, shoot = 4 },
+      { pause = 1, charge = 5, shoot = 4 },
+      { pause = 1, charge = 6, shoot = 2 },
+      { pause = 8 }
+    }
+  },
+  {
+    numPassengers = 10,
+    doors = 'top',
+    quarterBeat = 15,
+    defaultAttributes = {
+      baddieMethod = 'leftmost'
+    },
+    pattern = {
+      { pause = 30, charge = 60, shoot = 90 },
+      { pause = 30, charge = 60, shoot = 60 },
+      { pause = 30, charge = 60, shoot = 30 },
+      { pause = 120 } 
     }
   }
 }
@@ -190,7 +210,7 @@ local ENTITY_CLASSES = {
     health = 100,
     delayedHealth = 100,
     framesSinceHealthChanged = 999,
-    eyeRadius = 3,
+    eyeRadius = 4,
     radius = 6,
     facingX = 1.0,
     facingY = 0.0,
@@ -292,12 +312,14 @@ local ENTITY_CLASSES = {
             local dx = eyeX - obstacleEyeX
             local dy = eyeY - obstacleEyeY
             local dist = math.sqrt(dx * dx + dy * dy)
-            local fudgeRadius = math.min(math.max(0, dist / 15 - 1.5), 10)
-            local isIntersecting, x, y = calcCircleLineIntersection(self.x, self.y, self.targetX, self.targetY, obstacleEyeX, obstacleEyeY, obstacle.eyeRadius + fudgeRadius)
-            if isIntersecting then
-              self.target = obstacle
-              self.targetX = x
-              self.targetY = y
+            if obstacle.type == 'player' or (obstacle.type == 'baddie' and obstacle.isActive) then
+              local fudgeRadius = (obstacle.type == 'baddie' or self.health < 90 or obstacle.health < 90) and math.min(math.max(0, dist / 15 - 1.5), 10) or 0
+              local isIntersecting, x, y = calcCircleLineIntersection(self.x, self.y, self.targetX, self.targetY, obstacleEyeX, obstacleEyeY, obstacle.eyeRadius + fudgeRadius)
+              if isIntersecting then
+                self.target = obstacle
+                self.targetX = x
+                self.targetY = y
+              end
             end
           end
         end
@@ -430,6 +452,7 @@ local ENTITY_CLASSES = {
     attackAngle = 0,
     targetX = nil,
     targetY = nil,
+    isActive = false,
     timeSpentTargeted = 0.00,
     init = function(self)
       self.bodySprite = math.random(1, 48)
@@ -620,33 +643,35 @@ local ENTITY_CLASSES = {
           love.graphics.circle('line', self.x, self.y, self.radius)
         end
       elseif renderLayer == 4 then
-        local pupilX, pupilY = self:getPupilPosition()
-        local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
-        -- Draw eye white
-        local eyeFrame = 3
-        if self.attackPhase == 'charging' then
-          eyeFrame = 4
-        elseif self.attackPhase == 'shooting' then
-          eyeFrame = 2
-        elseif self.blinkFrames > 0 then
-          -- local b = math.abs(math.ceil(self.blinkFrames / 2) - 3) -- 2 to 0 to 2
-          eyeFrame = 6 - math.abs(math.ceil(self.blinkFrames / 2) - 3)
-        end
-        drawSprite(11 * (eyeFrame - 1) + 1, 185, 10, 7, eyeWhiteX - 5 + offsetX, eyeWhiteY - 3.5 + offsetY)
-        -- Draw pupil
-        local pupilColor
-        local pupilSize = 1.5
-        if self.attackPhase and self.attackPhase ~= 'pausing' then
-          pupilColor = COLOR.RED
-        else
-          pupilColor = COLOR.DARK_GREY
-        end
-        love.graphics.setColor(pupilColor)
-        love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
-        if DEBUG_DRAW_MODE then
-          local eyeX, eyeY = self:getEyePosition()
-          love.graphics.setColor(COLOR.DEBUG_GREEN)
-          love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
+        if self.isActive then
+          local pupilX, pupilY = self:getPupilPosition()
+          local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
+          -- Draw eye white
+          local eyeFrame = 3
+          if self.attackPhase == 'charging' then
+            eyeFrame = 4
+          elseif self.attackPhase == 'shooting' then
+            eyeFrame = 2
+          elseif self.blinkFrames > 0 then
+            -- local b = math.abs(math.ceil(self.blinkFrames / 2) - 3) -- 2 to 0 to 2
+            eyeFrame = 6 - math.abs(math.ceil(self.blinkFrames / 2) - 3)
+          end
+          drawSprite(11 * (eyeFrame - 1) + 1, 185, 10, 7, eyeWhiteX - 5 + offsetX, eyeWhiteY - 3.5 + offsetY)
+          -- Draw pupil
+          local pupilColor
+          local pupilSize = 1.5
+          if self.attackPhase and self.attackPhase ~= 'pausing' then
+            pupilColor = COLOR.RED
+          else
+            pupilColor = COLOR.DARK_GREY
+          end
+          love.graphics.setColor(pupilColor)
+          love.graphics.rectangle('fill', pupilX - pupilSize / 2, pupilY - pupilSize / 2, pupilSize, pupilSize)
+          if DEBUG_DRAW_MODE then
+            local eyeX, eyeY = self:getEyePosition()
+            love.graphics.setColor(COLOR.DEBUG_GREEN)
+            love.graphics.circle('line', eyeX, eyeY, self.eyeRadius)
+          end
         end
       elseif renderLayer == 5 then
         -- Draw laser
@@ -691,26 +716,26 @@ local ENTITY_CLASSES = {
       end
       return closestPlayer
     end,
-    attack = function(self, aimFrames, shootFrames, angleOrX, y)
+    attack = function(self, aimFrames, shootFrames, angle, isDeviation)
+      self.isActive = true
       self.shootFrames = shootFrames
       self.timeUntilBlink = 0.00
       self.blinkFrames = 0
       self.attackPhase = 'aiming'
       self.attackPhaseFrames = 0
       self.framesUntilNextAttackPhase = aimFrames - 14
-      local pupilX, pupilY = self:getPupilPosition()
-      if angleOrX and y then
-        local dx = angleOrX - pupilX
-        local dy = y - pupilY
-        self.attackAngle = math.atan2(dy, dx)
-      elseif angleOrX and not y then
-        self.attackAngle = angleOrX
-      else
+      if not angle or isDeviation then
         local target = self:getClosestPlayer()
         local targetEyeX, targetEyeY = target:getEyeWhitePosition()
+        local pupilX, pupilY = self:getPupilPosition()
         local dx = targetEyeX - pupilX
         local dy = targetEyeY - pupilY
         self.attackAngle = math.atan2(dy, dx)
+        if angle then
+          self.attackAngle = self.attackAngle + math.random() * angle - angle / 2
+        end
+      else
+        self.attackAngle = angle
       end
       self:calculateTarget()
     end,
@@ -751,6 +776,11 @@ local ENTITY_CLASSES = {
         self.targetX = pupilX + aimX / aimY * (GAME_HEIGHT + LASER_MARGIN.BOTTOM - pupilY)
         self.targetY = GAME_HEIGHT + LASER_MARGIN.BOTTOM
       end
+    end,
+    activate = function(self)
+      self.isActive = true
+      self.blinkFrames = 6
+      self.timeUntilBlink = 2.00
     end
   },
   poof = {
@@ -860,16 +890,19 @@ function love.update(dt)
     if #laserSchedule > 0 then
       local task = laserSchedule[1]
       task.pause = task.pause - 1
-      if task.pause <= 0 then
-        local baddieMethod = task.baddie
-        local baddie
-        if baddieMethod == 'leftmost' then
-          baddie = getLeftmostBaddie()
+      if task.shoot and not task.baddie and (task.pause <= level.quarterBeat or task.pause % level.quarterBeat == 2 or task.pause % level.quarterBeat == 4) then
+        if task.baddieMethod == 'leftmost' then
+          task.baddie = getLeftmostBaddie()
         else
-          baddie = getRandomBaddie()
+          task.baddie = getRandomBaddie()
         end
-        if baddie then
-          baddie:attack(task.charge, task.shoot)
+        if task.baddie then
+          task.baddie:activate()
+        end
+      end
+      if task.pause <= 0 then
+        if task.shoot and task.baddie then
+          task.baddie:attack(task.charge, task.shoot, task.angle or task.angleSpread, task.angleSpread)
         end
         table.remove(laserSchedule, 1)
       end
@@ -878,15 +911,21 @@ function love.update(dt)
       for _, origTask in ipairs(level.pattern) do
         local task = {}
         if level.defaultAttributes then
-          print('def')
           for k, v in pairs(level.defaultAttributes) do
-            print('def ' .. k)
             task[k] = v
           end
         end
         for k, v in pairs(origTask) do
-          print('orig ' .. k)
           task[k] = v
+        end
+        if task.pause then
+          task.pause = task.pause * level.quarterBeat
+        end
+        if task.charge then
+          task.charge = task.charge * level.quarterBeat
+        end
+        if task.shoot then
+          task.shoot = task.shoot * level.quarterBeat
         end
         table.insert(laserSchedule, task)
       end
@@ -956,13 +995,14 @@ function love.update(dt)
 end
 
 function love.draw()
+  local level = LEVELS[levelNumber]
   local screenShakeX = 0
   if shakeFrames > 0 and freezeFrames <= 0 then
     local maginitude = math.min(math.max(0.12, shakeFrames / 6), 1.75)
     screenShakeX = maginitude * (2 * (levelFrame % 2) - 1)
   end
   local isAtStop = (levelPhase == 'doors-opening' or levelPhase == 'passengers-boarding' or levelPhase == 'doors-closing')
-  local playerMissingHealth = (players[1] and players[1].health < 90) or (players[2] and players[2].health < 90)
+  local playerMissingHealth = (players[1] and players[1].health < 68) or (players[2] and players[2].health < 68)
   local playerChangedHealthRecently = (players[1] and players[1].framesSinceHealthChanged < 240) or (players[2] and players[2].framesSinceHealthChanged < 240)
   local shouldDrawHealthBars = playerChangedHealthRecently or (playerMissingHealth and (isAtStop or levelFrame % 280 > 140))
   -- Clear the screen
@@ -1017,10 +1057,13 @@ function love.draw()
   if doorSprite > 0 then
     love.graphics.setColor(COLOR.PURE_WHITE)
     local sx = 1 + 39 * (doorSprite - 1)
-    drawSprite(sx, 379, 38, 33, 60, 32)
-    drawSprite(sx, 379, 38, 33, 202, 32, true)
-    -- drawSprite(sx, 413, 38, 19, 60, 168)
-    -- drawSprite(sx, 413, 38, 19, 202, 168, true)
+    if level.doors == 'top' then
+      drawSprite(sx, 379, 38, 33, 60, 32)
+      drawSprite(sx, 379, 38, 33, 202, 32, true)
+    else
+      drawSprite(sx, 413, 38, 19, 60, 168)
+      drawSprite(sx, 413, 38, 19, 202, 168, true)
+    end
   end
   love.graphics.pop()
   -- Draw the game state
