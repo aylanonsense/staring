@@ -173,6 +173,8 @@ local ENTITY_CLASSES = {
   player = {
     groups = { players, obstacles },
     health = 100,
+    delayedHealth = 100,
+    framesSinceHealthChanged = 999,
     eyeRadius = 4,
     radius = 6,
     facingX = 1.0,
@@ -194,9 +196,18 @@ local ENTITY_CLASSES = {
     invincibilityFrames = 0,
     damageFrames = 0,
     update = function(self, dt)
+      local controller = self:getController()
       self.damageFrames = math.max(0, self.damageFrames - 1)
       self.invincibilityFrames = math.max(0, self.invincibilityFrames - 1)
-      local controller = self:getController()
+      -- Display health loss/gain smoothly
+      self.framesSinceHealthChanged = self.framesSinceHealthChanged + 1
+      if self.framesSinceHealthChanged > 30 then
+        if self.delayedHealth < self.health then
+          self.delayedHealth = math.min(self.delayedHealth + 60 * dt, self.health)
+        elseif self.delayedHealth > self.health then
+          self.delayedHealth = math.max(self.delayedHealth - 60 * dt, self.health)
+        end
+      end
       -- Calculate player facing
       local moveX, moveY, moveMagnitude = controller:getMoveDirection()
       if moveMagnitude >= 0.0 then
@@ -376,6 +387,8 @@ local ENTITY_CLASSES = {
         self.vy = 0
         self.damageFrames = 45
         self.invincibilityFrames = 120
+        self.health = math.max(0, self.health - 28)
+        self.framesSinceHealthChanged = 0
       end
     end
   },
@@ -828,7 +841,7 @@ function love.update(dt)
       local task = laserSchedule[1]
       task.pause = task.pause - 1
       if task.pause <= 0 then
-        local baddie = getRandomBaddie()
+        local baddie = (task.baddie or getRandomBaddie)()
         if baddie then
           baddie:attack(task.charge, task.shoot)
         end
@@ -837,9 +850,9 @@ function love.update(dt)
     end
     if #laserSchedule <= 0 then
       laserSchedule = {
-        { pause = 120, charge = 60, shoot = 90 },
-        { pause = 30, charge = 60, shoot = 60 },
-        { pause = 30, charge = 60, shoot = 30 }
+        { pause = 120, baddie = getLeftmostBaddie, charge = 60, shoot = 90 },
+        { pause = 30,  baddie = getLeftmostBaddie, charge = 60, shoot = 60 },
+        { pause = 30,  baddie = getLeftmostBaddie, charge = 60, shoot = 30 }
       }
     end
   end
@@ -914,7 +927,8 @@ function love.draw()
   end
   local isAtStop = (levelPhase == 'doors-opening' or levelPhase == 'passengers-boarding' or levelPhase == 'doors-closing')
   local playerMissingHealth = (players[1] and players[1].health < 90) or (players[2] and players[2].health < 90)
-  local shouldDrawHealthBars = playerMissingHealth and (isAtStop or levelFrame % 280 > 140)
+  local playerChangedHealthRecently = (players[1] and players[1].framesSinceHealthChanged < 240) or (players[2] and players[2].framesSinceHealthChanged < 240)
+  local shouldDrawHealthBars = playerChangedHealthRecently or (playerMissingHealth and (isAtStop or levelFrame % 280 > 140))
   -- Clear the screen
   love.graphics.clear(COLOR.WHITE)
   -- Draw the background
@@ -924,13 +938,12 @@ function love.draw()
   -- Draw player health
   if shouldDrawHealthBars then
     drawSprite(196, 379, 90, 11, 106, 12)
-    if players[1] then
-      love.graphics.setColor(players[1].color)
-      love.graphics.rectangle('fill', 117, 17, math.ceil(30 * players[1].health / 100), 5)
-    end
-    if players[2] then
-      love.graphics.setColor(players[2].color)
-      love.graphics.rectangle('fill', 165, 17, math.ceil(30 * players[2].health / 100), 5)
+    for p = 1, #players do
+      local player = players[p]
+      love.graphics.setColor(COLOR.WHITE)
+      love.graphics.rectangle('fill', 117, 17, math.ceil(30 * math.max(player.health, player.delayedHealth) / 100), 5)
+      love.graphics.setColor(player.color)
+      love.graphics.rectangle('fill', 117, 17, math.ceil(30 * math.min(player.health, player.delayedHealth) / 100), 5)
     end
   -- Draw stop display
   else
@@ -1116,20 +1129,31 @@ function drawSprite(sx, sy, sw, sh, x, y, flipHorizontal, flipVertical, rotation
     sw / 2, sh / 2)
 end
 
-function getRandomBaddie()
-  local j = math.random(0, #baddies - 1)
-  local targetedBaddie
-  for i = 1, #baddies do
-    local baddie = baddies[((i + j) % #baddies) + 1]
+function getBestBaddie(criteria)
+  local bestBaddie
+  local bestScore
+  for _, baddie in ipairs(baddies) do
     if not baddie.attackPhase or baddie.attackPhase == 'pausing' then
-      if baddie.isBeingTargeted then
-        targetedBaddie = baddie
-      else
-        return baddie
+      local score = criteria(baddie)
+      if not bestBaddie or score < bestScore then
+        bestBaddie = baddie
+        bestScore = score
       end
     end
   end
-  return targetedBaddie
+  return bestBaddie
+end
+
+function getRandomBaddie()
+  return getBestBaddie(function(baddie)
+    return math.random()
+  end)
+end
+
+function getLeftmostBaddie()
+  return getBestBaddie(function(baddie)
+    return baddie.x
+  end)
 end
 
 -- Moves two circular entities apart so they're not overlapping
