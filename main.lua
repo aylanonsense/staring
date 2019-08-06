@@ -2,7 +2,7 @@ local Controllers = require('src/Controller.lua')
 
 -- Constants
 local DEBUG_DRAW_MODE = false
-local DEBUG_SPEED_MODE = true
+local DEBUG_SPEED_MODE = false
 local COLOR = {
   LIGHT_GREY = { 191 / 255, 190 / 255, 190 / 255 }, -- #bfbebe
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
@@ -23,7 +23,7 @@ local PLAYER_DASH_SPEED = 1000
 local PLAYER_DASH_FRICTION = 0.30
 local PLAYER_DASH_DURATION = 0.20
 local PLAYER_DASH_INVINCIBILITY = 0.12
-local PLAYER_DASH_COOLDOWN = 0.10
+local PLAYER_DASH_COOLDOWN = 0.20
 local LASER_MARGIN = {
   TOP = 24,
   SIDE = 12,
@@ -141,6 +141,19 @@ local SEATS = {
   { x = 157, y = 78, priority = 4 },
   { x = 217, y = 78, priority = 4 },
 }
+local LEVELS = {
+  {
+    numPassengers = 10,
+    defaultAttributes = {
+      baddie = 'leftmost'
+    },
+    pattern = {
+      { pause = 120, charge = 60, shoot = 90 },
+      { pause = 30,  charge = 60, shoot = 60 },
+      { pause = 30,  charge = 60, shoot = 30 }
+    }
+  }
+}
 
 -- Assets
 local spriteSheet
@@ -156,6 +169,7 @@ local levelNumber
 local levelPhase
 local levelFrame
 local numPassengersLeftToBoard
+local stopNumber
 local laserSchedule
 local shakeFrames
 local freezeFrames
@@ -528,7 +542,7 @@ local ENTITY_CLASSES = {
         end
       end
       -- Damage players
-      if self.attackPhase == 'shooting' then
+      if self.attackPhase == 'shooting' and self.attackPhaseFrames > 3 then
         local pupilX, pupilY = self:getPupilPosition()
         for _, player in ipairs(players) do
           if player:canBeDamaged() then
@@ -554,7 +568,7 @@ local ENTITY_CLASSES = {
       end
       -- Destroy if targeted for too long
       self.timeSpentTargeted = math.max(0.00, self.timeSpentTargeted + (self.isBeingTargeted and dt or -dt / 4))
-      if self.timeSpentTargeted > 1.00 then
+      if self.timeSpentTargeted > 1.10 then
         self:destroy()
         shakeFrames = math.max(8, shakeFrames)
         local playerPupilX, playerPupilY = closestPlayer:getPupilPosition()
@@ -785,7 +799,8 @@ function love.load()
   shakeFrames = 0
   freezeFrames = 0
   beatRate = 30
-  levelNumber = 3
+  levelNumber = 1
+  stopNumber = 0
   levelPhase = 'doors-opening'
   levelFrame = 0
   -- Set default filter to nearest to allow crisp pixel art
@@ -816,6 +831,8 @@ function love.load()
 end
 
 function love.update(dt)
+  local level = LEVELS[levelNumber]
+  -- Freeze the screen
   if freezeFrames > 0 then
     freezeFrames = math.max(0, freezeFrames - 1)
     return
@@ -826,7 +843,7 @@ function love.update(dt)
   if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
     levelPhase = 'passengers-boarding'
     levelFrame = 0
-    numPassengersLeftToBoard = 10
+    numPassengersLeftToBoard = level.numPassengers
     for _, seat in ipairs(SEATS) do
       seat.passenger = nil
     end
@@ -834,7 +851,7 @@ function love.update(dt)
     levelPhase = 'doors-closing'
     levelFrame = 0
   elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
-    levelNumber = levelNumber + 1
+    stopNumber = stopNumber + 1
     levelPhase = 'in-transit'
     levelFrame = 0
   end
@@ -844,7 +861,13 @@ function love.update(dt)
       local task = laserSchedule[1]
       task.pause = task.pause - 1
       if task.pause <= 0 then
-        local baddie = (task.baddie or getRandomBaddie)()
+        local baddieMethod = task.baddie
+        local baddie
+        if baddieMethod == 'leftmost' then
+          baddie = getLeftmostBaddie()
+        else
+          baddie = getRandomBaddie()
+        end
         if baddie then
           baddie:attack(task.charge, task.shoot)
         end
@@ -852,11 +875,21 @@ function love.update(dt)
       end
     end
     if #laserSchedule <= 0 then
-      laserSchedule = {
-        { pause = 120, baddie = getLeftmostBaddie, charge = 60, shoot = 90 },
-        { pause = 30,  baddie = getLeftmostBaddie, charge = 60, shoot = 60 },
-        { pause = 30,  baddie = getLeftmostBaddie, charge = 60, shoot = 30 }
-      }
+      for _, origTask in ipairs(level.pattern) do
+        local task = {}
+        if level.defaultAttributes then
+          print('def')
+          for k, v in pairs(level.defaultAttributes) do
+            print('def ' .. k)
+            task[k] = v
+          end
+        end
+        for k, v in pairs(origTask) do
+          print('orig ' .. k)
+          task[k] = v
+        end
+        table.insert(laserSchedule, task)
+      end
     end
   end
   -- Spawn passengers
@@ -957,15 +990,15 @@ function love.draw()
       local x = 103 + 10 * i
       local y = 17
       local stopFrame
-      if i < levelNumber then
+      if i < stopNumber then
         stopFrame = 3
-      elseif i > levelNumber then
+      elseif i > stopNumber then
         stopFrame = 1
       else
         stopFrame = 2
       end
       drawSprite(240 + 8 * (stopFrame - 1), 185, 7, 7, x, y)
-      if i == levelNumber and (not isAtStop or levelFrame % 60 < 40) then
+      if i == stopNumber and (not isAtStop or levelFrame % 60 < 40) then
         drawSprite(isAtStop and 286 or 264, 185, 21, 7, x - 7, y - 7)
       end
     end
