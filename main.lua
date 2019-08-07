@@ -1095,6 +1095,18 @@ function love.draw()
       drawSprite(sx, 413, 38, 19, 202, 168, true)
     end
   end
+  -- Draw instructions
+  if levelNumber == 1 and levelPhase == 'in-transit' then
+    if levelFrame > 60 then
+      drawSprite(289, 193, 64, 38, 35, 95)
+    end
+    if levelFrame > 120 then
+      drawSprite(289, 232, 64, 38, 118, 75)
+    end
+    if levelFrame > 180 then
+      drawSprite(289, 271, 64, 38, 201, 95)
+    end
+  end
   love.graphics.pop()
   -- Draw the game state
   love.graphics.push()
