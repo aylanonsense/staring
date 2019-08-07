@@ -437,6 +437,12 @@ local ENTITY_CLASSES = {
         self.health = math.max(0, self.health - 28)
         self.framesSinceHealthChanged = 0
       end
+    end,
+    regenerate = function(self)
+      if self.health < 100 then
+        self.health = math.min(self.health + 35, 100)
+        self.framesSinceHealthChanged = 0
+      end
     end
   },
   baddie = {
@@ -881,6 +887,9 @@ function love.update(dt)
   levelFrame = levelFrame + 1
   if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
     levelPhase = 'passengers-boarding'
+    if #players == 1 then
+      players[1]:regenerate()
+    end
     levelFrame = 0
     numPassengersLeftToBoard = level.numPassengers
     for _, seat in ipairs(SEATS) do
@@ -1097,14 +1106,16 @@ function love.draw()
   end
   -- Draw instructions
   if levelNumber == 1 and levelPhase == 'in-transit' then
+    local x = (#joystickControllers > 0) and 289 or 354
+    love.graphics.setColor(COLOR.PURE_WHITE)
     if levelFrame > 60 then
-      drawSprite(289, 193, 64, 38, 35, 95)
+      drawSprite(x, 193, 64, 38, 35, 95)
     end
     if levelFrame > 120 then
-      drawSprite(289, 232, 64, 38, 118, 75)
+      drawSprite(x, 232, 64, 38, 118, 75)
     end
     if levelFrame > 180 then
-      drawSprite(289, 271, 64, 38, 201, 95)
+      drawSprite(x, 271, 64, 38, 201, 95)
     end
   end
   love.graphics.pop()

@@ -34,7 +34,7 @@ function MouseAndKeyboardController:new()
       self._framesSinceDash = math.max(0, self._framesSinceDash - 1)
     end,
     keypressed = function(self, btn)
-      if btn == 'lshift' then
+      if btn == 'lshift' or btn == 'rshift' then
         self._framesSinceDash = INPUT_BUFFER_FRAMES
       end
     end,
@@ -73,7 +73,7 @@ function MouseAndKeyboardController:new()
       return self._framesSinceDash > 0
     end,
     isDashing = function(self)
-      return love.keyboard.isDown('lshift')
+      return love.keyboard.isDown('lshift') or love.keyboard.isDown('rshift')
     end,
     isAiming = function(self)
       return love.mouse.isDown(1)
