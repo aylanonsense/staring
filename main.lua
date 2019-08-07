@@ -2,7 +2,7 @@ local Controllers = require('src/Controller.lua')
 
 -- Constants
 local DEBUG_DRAW_MODE = false
-local DEBUG_SPEED_MODE = true
+local DEBUG_SPEED_MODE = false
 local COLOR = {
   LIGHT_GREY = { 191 / 255, 190 / 255, 190 / 255 }, -- #bfbebe
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
@@ -142,6 +142,15 @@ local SEATS = {
   { x = 217, y = 78, priority = 4 },
 }
 local LEVELS = {
+  {
+    numPassengers = 3,
+    doors = 'top',
+    quarterBeat = 20,
+    pattern = {
+      { pause = 4, charge = 4, shoot = 2 },
+      { pause = 6 }
+    }
+  },
   {
     numPassengers = 10,
     doors = 'top',
@@ -884,13 +893,22 @@ function love.update(dt)
     stopNumber = stopNumber + 1
     levelPhase = 'in-transit'
     levelFrame = 0
+  elseif levelPhase == 'in-transit' and #baddies <= 0 then
+    levelPhase = 'stopping'
+    levelFrame = 0
+  elseif levelPhase == 'stopping' and levelFrame > (DEBUG_SPEED_MODE and 0 or 30) then
+    levelNumber = levelNumber + 1
+    levelPhase = 'doors-opening'
+    levelFrame = 0
   end
   -- Schedule lasers
   if levelPhase == 'in-transit' then
     if #laserSchedule > 0 then
       local task = laserSchedule[1]
-      task.pause = task.pause - 1
-      if task.shoot and not task.baddie and (task.pause <= level.quarterBeat or task.pause % level.quarterBeat == 2 or task.pause % level.quarterBeat == 4) then
+      if task.pause then
+        task.pause = task.pause - 1
+      end
+      if task.shoot and not task.baddie and (not task.pause or task.pause <= level.quarterBeat or task.pause % level.quarterBeat == 2 or task.pause % level.quarterBeat == 4) then
         if task.baddieMethod == 'leftmost' then
           task.baddie = getLeftmostBaddie()
         else
@@ -900,9 +918,21 @@ function love.update(dt)
           task.baddie:activate()
         end
       end
-      if task.pause <= 0 then
+      if not task.pause or task.pause <= 0 then
         if task.shoot and task.baddie then
-          task.baddie:attack(task.charge, task.shoot, task.angle or task.angleSpread, task.angleSpread)
+          local angle
+          local isDeviation
+          if task.angle and task.angleSpread then
+            angle = task.angle + math.random() * task.angleSpread - task.angleSpread / 2
+            isDeviation = false
+          elseif task.angle then
+            angle = task.angle
+            isDeviation = false
+          elseif task.angleSpread then
+            angle = task.angleSpread
+            isDeviation = true
+          end
+          task.baddie:attack(task.charge, task.shoot, angle, isDeviation)
         end
         table.remove(laserSchedule, 1)
       end
