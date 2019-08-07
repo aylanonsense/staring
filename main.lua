@@ -2,7 +2,7 @@ local Controllers = require('src/Controller.lua')
 
 -- Constants
 local DEBUG_DRAW_MODE = false
-local DEBUG_SPEED_MODE = false
+local DEBUG_SPEED_MODE = true
 local COLOR = {
   LIGHT_GREY = { 191 / 255, 190 / 255, 190 / 255 }, -- #bfbebe
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
@@ -239,8 +239,10 @@ local ENTITY_CLASSES = {
     pupilOffsetY = 0,
     invincibilityFrames = 0,
     damageFrames = 0,
+    framesSinceStoppedMoving = 0,
     update = function(self, dt)
       local controller = self:getController()
+      self.framesSinceStoppedMoving = self.framesSinceStoppedMoving + 1
       self.damageFrames = math.max(0, self.damageFrames - 1)
       self.invincibilityFrames = math.max(0, self.invincibilityFrames - 1)
       -- Display health loss/gain smoothly
@@ -254,7 +256,7 @@ local ENTITY_CLASSES = {
       end
       -- Calculate player facing
       local moveX, moveY, moveMagnitude = controller:getMoveDirection()
-      if moveMagnitude >= 0.0 then
+      if moveMagnitude > 0.0 then
         self.facingX = moveX
         self.facingY = moveY
       end
@@ -281,10 +283,16 @@ local ENTITY_CLASSES = {
       if self.isDashing then
         self.vx = self.vx * (1 - PLAYER_DASH_FRICTION)
         self.vy = self.vy * (1 - PLAYER_DASH_FRICTION)
+        if self.dashDuration > 0.10 then
+          self.framesSinceStoppedMoving = 0
+        end
       else
         local speed = (self.isAiming or self.damageFrames > 0) and 0 or PLAYER_MOVE_SPEED
         self.vx = speed * moveX * moveMagnitude
         self.vy = speed * moveY * moveMagnitude
+        if speed > 0 and moveMagnitude > 0.0 then
+          self.framesSinceStoppedMoving = 0
+        end
       end
       self:applyVelocity(dt)
       -- Check for collisions
@@ -371,7 +379,26 @@ local ENTITY_CLASSES = {
       elseif renderLayer == 3 and drawCharacter then
         -- Draw body
         love.graphics.setColor(COLOR.PURE_WHITE)
-        drawSprite(1, self.color == COLOR.PURPLE and 341 or 360, 23, 18, self.x - 12.5, self.y - 11)
+        local flip = self.facingX < 0
+        local speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
+        local bodySprite
+        if self.damageFrames > 0 then
+          bodySprite = 9
+          flip = self.framesAlive % 6 < 3
+        elseif self.framesSinceStoppedMoving > 0 and self.framesSinceStoppedMoving <= 8 then
+          bodySprite = self.framesSinceStoppedMoving <= 4 and 7 or 8
+        elseif speed > 10 then
+          local angle = (math.atan2(self.facingY, self.facingX) + 2.5 * math.pi) % (2 * math.pi)
+          if angle > math.pi then
+            angle = 2 * math.pi - angle
+          end
+          angle = angle / math.pi
+          angle = math.floor(4 * angle + 0.5)
+          bodySprite = 2 + angle
+        else
+          bodySprite = 1
+        end
+        drawSprite(1 + 24 * (bodySprite - 1), self.color == COLOR.PURPLE and 341 or 360, 23, 18, self.x - (flip and 10.5 or 12.5), self.y - 11, flip)
         if DEBUG_DRAW_MODE then
           love.graphics.setColor(COLOR.DEBUG_BLUE)
           love.graphics.circle('line', self.x, self.y, self.radius)
@@ -388,7 +415,7 @@ local ENTITY_CLASSES = {
         love.graphics.setColor(COLOR.PURE_WHITE)
         local eyeWhiteX, eyeWhiteY = self:getEyeWhitePosition()
         local eyeFrame = self.damageFrames > 0 and 2 or 3
-        drawSprite(56 + 11 * (eyeFrame - 1), 185, 10, 7, eyeWhiteX - 5, eyeWhiteY - 3)
+        drawSprite(56 + 11 * (eyeFrame - 1), 185, 10, 7, eyeWhiteX - 5, eyeWhiteY - ((self.framesSinceStoppedMoving > 0 and self.framesSinceStoppedMoving <= 4) and 2 or 3))
         local pupilX, pupilY = self:getPupilPosition()
         love.graphics.setColor(self.color)
         love.graphics.rectangle('fill', pupilX - 0.5, pupilY - 0.5, 1, 1)
