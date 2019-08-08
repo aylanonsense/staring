@@ -330,7 +330,7 @@ local ENTITY_CLASSES = {
             local dy = eyeY - obstacleEyeY
             local dist = math.sqrt(dx * dx + dy * dy)
             if obstacle.type == 'player' or (obstacle.type == 'baddie' and obstacle.isActive) then
-              local fudgeRadius = (obstacle.type == 'baddie' or self.health < 90 or obstacle.health < 90) and math.min(math.max(0, dist / 15 - 1.5), 10) or 0
+              local fudgeRadius = (obstacle.type == 'baddie' or obstacle.health < 100) and math.min(math.max(0, dist / 15 - 1.5), 10) or 0
               local isIntersecting, x, y = calcCircleLineIntersection(self.x, self.y, self.targetX, self.targetY, obstacleEyeX, obstacleEyeY, obstacle.eyeRadius + fudgeRadius)
               if isIntersecting then
                 self.target = obstacle
@@ -369,6 +369,25 @@ local ENTITY_CLASSES = {
       end
       self.pupilOffsetX = self.aimX
       self.pupilOffsetY = self.aimY
+      -- Heal
+      if self.target and self.target.type == 'player' then
+        self.target:heal(dt)
+      end
+      -- If healing, spawn hearts
+      if self.delayedHealth < self.health and self.framesSinceHealthChanged < 30 and self.framesAlive % 15 == 0 then
+        local isPurple = (#players <= 1 and self.playerNum == 1) or (#players > 1 and self.playerNum == 2)
+        spawnEntity('poof', {
+          x = self.x + 10 * math.random() - 5,
+          y = self.y - 3,
+          size = 2,
+          isHeart = true,
+          isPurple = isPurple,
+          angle = -math.pi / 2,
+          friction = 0.01,
+          duration = 0.80 + 0.20 * math.random(),
+          speed = 40
+        })
+      end
     end,
     draw = function(self, renderLayer)
       local drawCharacter = (self.damageFrames > 0 or self.isDashing or self.invincibilityFrames % 10 < 5)
@@ -449,7 +468,7 @@ local ENTITY_CLASSES = {
       return x + offsetX, y + offsetY
     end,
     canBeDamaged = function(self)
-      return self.invincibilityFrames <= 0
+      return self.invincibilityFrames <= 0 and self.health > 0
     end,
     damage = function(self)
       if self:canBeDamaged() then
@@ -468,6 +487,12 @@ local ENTITY_CLASSES = {
     regenerate = function(self)
       if self.health < 100 then
         self.health = math.min(self.health + 35, 100)
+        self.framesSinceHealthChanged = 0
+      end
+    end,
+    heal = function(self, dt)
+      if self.health < 100 then
+        self.health = math.min(self.health + 14 * dt, 100)
         self.framesSinceHealthChanged = 0
       end
     end
@@ -860,7 +885,11 @@ local ENTITY_CLASSES = {
     end,
     draw = function(self)
       local size = math.min(math.max(1, math.ceil(self.size * (1 - (self.timeAlive / self.duration)))), 5)
-      local poofSprite = 6 - size
+      if self.isHeart then
+        poofSprite = (8 - size) + (self.isPurple and 0 or 2)
+      else
+        poofSprite = 6 - size
+      end
       drawSprite(196 + 10 * (poofSprite - 1), 391, 9, 9, self.x - 4.5, self.y - 4.5)
     end
   }
@@ -1079,13 +1108,14 @@ function love.draw()
   drawSprite(1, 1, 300, 183, 0, 9)
   -- Draw player health
   if shouldDrawHealthBars then
+    love.graphics.setColor(COLOR.PURE_WHITE)
     drawSprite(196, 379, 90, 11, 106, 12)
     for p = 1, #players do
       local player = players[p]
       love.graphics.setColor(COLOR.WHITE)
-      love.graphics.rectangle('fill', 117, 17, math.ceil(30 * math.max(player.health, player.delayedHealth) / 100), 5)
+      love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.max(player.health, player.delayedHealth) / 100), 5)
       love.graphics.setColor(player.color)
-      love.graphics.rectangle('fill', 117, 17, math.ceil(30 * math.min(player.health, player.delayedHealth) / 100), 5)
+      love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.min(player.health, player.delayedHealth) / 100), 5)
     end
   -- Draw stop display
   else
