@@ -256,7 +256,7 @@ local ENTITY_CLASSES = {
       end
       -- Calculate player facing
       local moveX, moveY, moveMagnitude = controller:getMoveDirection()
-      if moveMagnitude > 0.0 then
+      if moveMagnitude > 0.0 and self.health > 0 then
         self.facingX = moveX
         self.facingY = moveY
       end
@@ -268,7 +268,7 @@ local ENTITY_CLASSES = {
           self.isDashing = false
         end
       end
-      if controller:justStartedDashing() and self.dashCooldown <= 0.00 and self.damageFrames <= 0 then
+      if controller:justStartedDashing() and self.dashCooldown <= 0.00 and self.damageFrames <= 0 and self.health > 0 then
         self.isAiming = false
         self.isDashing = true
         self.invincibilityFrames = math.max(60 * PLAYER_DASH_INVINCIBILITY, self.invincibilityFrames)
@@ -287,7 +287,7 @@ local ENTITY_CLASSES = {
           self.framesSinceStoppedMoving = 0
         end
       else
-        local speed = (self.isAiming or self.damageFrames > 0) and 0 or PLAYER_MOVE_SPEED
+        local speed = (self.isAiming or self.damageFrames > 0 or self.health <= 0) and 0 or PLAYER_MOVE_SPEED
         self.vx = speed * moveX * moveMagnitude
         self.vy = speed * moveY * moveMagnitude
         if speed > 0 and moveMagnitude > 0.0 then
@@ -313,7 +313,7 @@ local ENTITY_CLASSES = {
         self.aimX = moveX
         self.aimY = moveY
       end
-      if not self.isAiming then
+      if not self.isAiming or self.health <= 0 then
         self.target = nil
         self.targetX = nil
         self.targetY = nil
@@ -390,7 +390,7 @@ local ENTITY_CLASSES = {
       end
     end,
     draw = function(self, renderLayer)
-      local drawCharacter = (self.damageFrames > 0 or self.isDashing or self.invincibilityFrames % 10 < 5)
+      local drawCharacter = (self.damageFrames > 0 or self.isDashing or self.invincibilityFrames % 10 < 5 or self.health <= 0)
       if renderLayer == 1 then
         -- Draw shadow
         local shadowSprite = 5
@@ -404,6 +404,8 @@ local ENTITY_CLASSES = {
         if self.damageFrames > 0 then
           bodySprite = 9
           flip = self.framesAlive % 6 < 3
+        elseif self.health <= 0 then
+          bodySprite = 10
         elseif self.framesSinceStoppedMoving > 0 and self.framesSinceStoppedMoving <= 8 then
           bodySprite = self.framesSinceStoppedMoving <= 4 and 7 or 8
         elseif speed > 10 then
@@ -424,7 +426,7 @@ local ENTITY_CLASSES = {
         end
       elseif renderLayer == 4 then
         -- Draw laser
-        if self.isAiming then
+        if self.isAiming and self.targetX and self.targetY then
           local pupilX, pupilY = self:getPupilPosition()
           love.graphics.setColor(self.color)
           drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY)
@@ -449,7 +451,7 @@ local ENTITY_CLASSES = {
       return playerControllers[self.playerNum] or blankController
     end,
     getEyePosition = function(self)
-      return self.x, self.y - 2
+      return self.x, self.y + (self.health <= 0 and 1.5 or -2)
     end,
     getEyeWhitePosition = function(self)
       local x, y = self:getEyePosition()
@@ -491,7 +493,7 @@ local ENTITY_CLASSES = {
       end
     end,
     heal = function(self, dt)
-      if self.health < 100 then
+      if self.health < 100 and self.invincibilityFrames <= 0 then
         self.health = math.min(self.health + 14 * dt, 100)
         self.framesSinceHealthChanged = 0
       end
@@ -922,12 +924,12 @@ function love.load()
     x = GAME_WIDTH / 2 - 25,
     y = GAME_HEIGHT / 2
   })
-  -- spawnEntity('player', {
-  --   playerNum = 2,
-  --   color = COLOR.GREEN,
-  --   x = GAME_WIDTH / 2 + 25,
-  --   y = GAME_HEIGHT / 2
-  -- })
+  spawnEntity('player', {
+    playerNum = 2,
+    color = COLOR.GREEN,
+    x = GAME_WIDTH / 2 + 25,
+    y = GAME_HEIGHT / 2
+  })
   addNewEntitiesToGame()
 end
 
