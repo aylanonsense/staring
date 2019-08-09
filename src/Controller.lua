@@ -10,6 +10,9 @@ function BlankController:new()
     getAimDirection = function(self, offsetX, offsetY)
       return 0.0, 0.0, 0.0
     end,
+    justPressedAnything = function(self)
+      return false
+    end,
     justStartedDashing = function(self)
       return false
     end,
@@ -29,11 +32,14 @@ local MouseAndKeyboardController = {}
 function MouseAndKeyboardController:new()
   return {
     type = 'mouse-and-keyboard-controller',
+    _framesSinceButton = 0,
     _framesSinceDash = 0,
     update = function(self, dt)
+      self._framesSinceButton = math.max(0, self._framesSinceButton - 1)
       self._framesSinceDash = math.max(0, self._framesSinceDash - 1)
     end,
     keypressed = function(self, btn)
+      self._framesSinceButton = INPUT_BUFFER_FRAMES
       if btn == 'lshift' or btn == 'rshift' then
         self._framesSinceDash = INPUT_BUFFER_FRAMES
       end
@@ -69,6 +75,9 @@ function MouseAndKeyboardController:new()
         end
       end
     end,
+    justPressedAnything = function(self)
+      return self._framesSinceButton > 0
+    end,
     justStartedDashing = function(self)
       return self._framesSinceDash > 0
     end,
@@ -89,15 +98,16 @@ function JoystickController:new(joystick)
   return {
     type = 'joystick-controller',
     _joystick = joystick,
+    _framesSinceButton = 0,
     _framesSinceDash = 0,
     update = function(self, dt)
+      self._framesSinceButton = math.max(0, self._framesSinceButton - 1)
       self._framesSinceDash = math.max(0, self._framesSinceDash - 1)
     end,
     joystickpressed = function(self, joystick, btn)
       if joystick == self._joystick then
-        if btn == 5 or btn == 7 then
-          self._framesSinceDash = INPUT_BUFFER_FRAMES
-        end
+        self._framesSinceButton = INP
+        self._framesSinceDash = INPUT_BUFFER_FRAMES
       end
     end,
     getMoveDirection = function(self)
@@ -143,6 +153,9 @@ function JoystickController:new(joystick)
           return dirX / dist, dirY / dist, mag
         end
       end
+    end,
+    justPressedAnything = function(self)
+      return self._framesSinceButton > 0
     end,
     justStartedDashing = function(self)
       return self._framesSinceDash > 0

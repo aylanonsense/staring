@@ -273,6 +273,7 @@ local stopNumber
 local laserSchedule
 local shakeFrames
 local freezeFrames
+local isShowingTitleScreen
 
 -- Entity variables
 local entities
@@ -992,6 +993,7 @@ local ENTITY_CLASSES = {
 }
 
 function love.load()
+  isShowingTitleScreen = true
   laserSchedule = {}
   shakeFrames = 0
   freezeFrames = 0
@@ -1035,279 +1037,297 @@ function love.update(dt)
     return
   end
   shakeFrames = math.max(0, shakeFrames - 1)
-  -- Update level phase
   levelFrame = levelFrame + 1
-  if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
-    levelPhase = 'passengers-boarding'
-    if #players == 1 then
-      players[1]:regenerate()
-    end
-    levelFrame = 0
-    numPassengersLeftToBoard = level.numPassengers
-    for _, seat in ipairs(SEATS) do
-      seat.passenger = nil
-    end
-  elseif levelPhase == 'passengers-boarding' and numPassengersLeftToBoard <= 0 then
-    levelPhase = 'doors-closing'
-    levelFrame = 0
-  elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
-    stopNumber = stopNumber + 1
-    levelPhase = 'in-transit'
-    levelFrame = 0
-  elseif levelPhase == 'in-transit' and #baddies <= 0 then
-    levelPhase = 'stopping'
-    levelFrame = 0
-  elseif levelPhase == 'stopping' and levelFrame > (DEBUG_SPEED_MODE and 0 or 30) then
-    levelNumber = levelNumber + 1
-    laserSchedule = {}
-    levelPhase = 'doors-opening'
-    levelFrame = 0
-  end
-  -- Schedule lasers
-  if levelPhase == 'in-transit' then
-    if #laserSchedule > 0 then
-      local task = laserSchedule[1]
-      if task.pause then
-        task.pause = task.pause - 1
+  if isShowingTitleScreen then
+    for p = 1, 2 do
+      if playerControllers[p] and playerControllers[p]:justPressedAnything() then
+        isShowingTitleScreen = false
       end
-      if task.shoot and not task.baddie and (not task.pause or task.pause <= level.beat or task.pause == 2 * level.beat or task.pause == 2 * level.beat - 1 or task.pause == 4 * level.beat or task.pause == 4 * level.beat - 1) then
-        if task.baddieMethod == 'upper' then
-          task.baddie = getUpperBaddie()
-        elseif task.baddieMethod == 'lower' then
-          task.baddie = getLowerBaddie()
-        elseif task.baddieMethod == 'left' then
-          task.baddie = getLeftBaddie()
-        elseif task.baddieMethod == 'right' then
-          task.baddie = getRightBaddie()
-        elseif task.baddieMethod == 'upper-left' then
-          task.baddie = getUpperLeftBaddie()
-        elseif task.baddieMethod == 'upper-right' then
-          task.baddie = getUpperRightBaddie()
-        elseif task.baddieMethod == 'lower-left' then
-          task.baddie = getLowerLeftBaddie()
-        elseif task.baddieMethod == 'lower-right' then
-          task.baddie = getLowerRightBaddie()
-        else
-          task.baddie = getRandomBaddie()
-        end
-        if task.baddie then
-          task.baddie:activate()
-        end
+    end
+  else
+    -- Update level phase
+    if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
+      levelPhase = 'passengers-boarding'
+      if #players == 1 then
+        players[1]:regenerate()
       end
-      if not task.pause or task.pause <= 0 then
-        if task.shoot and task.baddie then
-          local angle
-          local isDeviation
-          if task.angle and task.angleSpread then
-            angle = task.angle + math.random() * task.angleSpread - task.angleSpread / 2
-            isDeviation = false
-          elseif task.angle then
-            angle = task.angle
-            isDeviation = false
-          elseif task.angleSpread then
-            angle = task.angleSpread
-            isDeviation = true
+      levelFrame = 0
+      numPassengersLeftToBoard = level.numPassengers
+      for _, seat in ipairs(SEATS) do
+        seat.passenger = nil
+      end
+    elseif levelPhase == 'passengers-boarding' and numPassengersLeftToBoard <= 0 then
+      levelPhase = 'doors-closing'
+      levelFrame = 0
+    elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
+      stopNumber = stopNumber + 1
+      levelPhase = 'in-transit'
+      levelFrame = 0
+    elseif levelPhase == 'in-transit' and #baddies <= 0 then
+      levelPhase = 'stopping'
+      levelFrame = 0
+    elseif levelPhase == 'stopping' and levelFrame > (DEBUG_SPEED_MODE and 0 or 30) then
+      levelNumber = levelNumber + 1
+      laserSchedule = {}
+      levelPhase = 'doors-opening'
+      levelFrame = 0
+    end
+    -- Schedule lasers
+    if levelPhase == 'in-transit' then
+      if #laserSchedule > 0 then
+        local task = laserSchedule[1]
+        if task.pause then
+          task.pause = task.pause - 1
+        end
+        if task.shoot and not task.baddie and (not task.pause or task.pause <= level.beat or task.pause == 2 * level.beat or task.pause == 2 * level.beat - 1 or task.pause == 4 * level.beat or task.pause == 4 * level.beat - 1) then
+          if task.baddieMethod == 'upper' then
+            task.baddie = getUpperBaddie()
+          elseif task.baddieMethod == 'lower' then
+            task.baddie = getLowerBaddie()
+          elseif task.baddieMethod == 'left' then
+            task.baddie = getLeftBaddie()
+          elseif task.baddieMethod == 'right' then
+            task.baddie = getRightBaddie()
+          elseif task.baddieMethod == 'upper-left' then
+            task.baddie = getUpperLeftBaddie()
+          elseif task.baddieMethod == 'upper-right' then
+            task.baddie = getUpperRightBaddie()
+          elseif task.baddieMethod == 'lower-left' then
+            task.baddie = getLowerLeftBaddie()
+          elseif task.baddieMethod == 'lower-right' then
+            task.baddie = getLowerRightBaddie()
+          else
+            task.baddie = getRandomBaddie()
           end
-          if angle then
-            angle = angle * math.pi / 180
+          if task.baddie then
+            task.baddie:activate()
           end
-          local rotation = (task.rotation and (task.rotation * (math.pi / 180) * (60 / level.beat)) or 0) 
-          task.baddie:attack(task.charge, task.shoot, angle, isDeviation, rotation)
         end
-        table.remove(laserSchedule, 1)
+        if not task.pause or task.pause <= 0 then
+          if task.shoot and task.baddie then
+            local angle
+            local isDeviation
+            if task.angle and task.angleSpread then
+              angle = task.angle + math.random() * task.angleSpread - task.angleSpread / 2
+              isDeviation = false
+            elseif task.angle then
+              angle = task.angle
+              isDeviation = false
+            elseif task.angleSpread then
+              angle = task.angleSpread
+              isDeviation = true
+            end
+            if angle then
+              angle = angle * math.pi / 180
+            end
+            local rotation = (task.rotation and (task.rotation * (math.pi / 180) * (60 / level.beat)) or 0) 
+            task.baddie:attack(task.charge, task.shoot, angle, isDeviation, rotation)
+          end
+          table.remove(laserSchedule, 1)
+        end
       end
-    end
-    if #laserSchedule <= 0 then
-      for _, origTask in ipairs(level.pattern) do
-        local task = {}
-        if level.defaultAttributes then
-          for k, v in pairs(level.defaultAttributes) do
+      if #laserSchedule <= 0 then
+        for _, origTask in ipairs(level.pattern) do
+          local task = {}
+          if level.defaultAttributes then
+            for k, v in pairs(level.defaultAttributes) do
+              task[k] = v
+            end
+          end
+          for k, v in pairs(origTask) do
             task[k] = v
           end
+          if task.pause then
+            task.pause = task.pause * level.beat
+          end
+          if task.charge then
+            task.charge = task.charge * level.beat
+          end
+          if task.shoot then
+            task.shoot = task.shoot * level.beat
+          end
+          table.insert(laserSchedule, task)
         end
-        for k, v in pairs(origTask) do
-          task[k] = v
-        end
-        if task.pause then
-          task.pause = task.pause * level.beat
-        end
-        if task.charge then
-          task.charge = task.charge * level.beat
-        end
-        if task.shoot then
-          task.shoot = task.shoot * level.beat
-        end
-        table.insert(laserSchedule, task)
       end
     end
-  end
-  -- Spawn passengers
-  if levelPhase == 'passengers-boarding' and levelFrame % (DEBUG_SPEED_MODE and 1 or 10) == 0 and numPassengersLeftToBoard > 0 then
-    -- Select a random seat
-    local maxPriority = 1
-    for attempt = 1, 100 do
-      maxPriority = maxPriority + 0.3
-      local seatNum = math.random(1, #SEATS)
-      local seat = SEATS[seatNum]
-      local priority = seat.priority
-      if seatNum > 1 and SEATS[seatNum - 1].passenger then
-        priority = priority + 2
-      end
-      if seatNum < #SEATS and SEATS[seatNum + 1].passenger then
-        priority = priority + 2
-      end
-      if not seat.passenger and priority <= maxPriority then
-        -- Spawn a passenger in that seat
-        numPassengersLeftToBoard = numPassengersLeftToBoard - 1
-        seat.passenger = spawnEntity('baddie', {
-          x = seat.x + math.random(-5, 5),
-          y = seat.y + math.random(-2, 2),
-          seat = seat
-        })
-        break
+    -- Spawn passengers
+    if levelPhase == 'passengers-boarding' and levelFrame % (DEBUG_SPEED_MODE and 1 or 10) == 0 and numPassengersLeftToBoard > 0 then
+      -- Select a random seat
+      local maxPriority = 1
+      for attempt = 1, 100 do
+        maxPriority = maxPriority + 0.3
+        local seatNum = math.random(1, #SEATS)
+        local seat = SEATS[seatNum]
+        local priority = seat.priority
+        if seatNum > 1 and SEATS[seatNum - 1].passenger then
+          priority = priority + 2
+        end
+        if seatNum < #SEATS and SEATS[seatNum + 1].passenger then
+          priority = priority + 2
+        end
+        if not seat.passenger and priority <= maxPriority then
+          -- Spawn a passenger in that seat
+          numPassengersLeftToBoard = numPassengersLeftToBoard - 1
+          seat.passenger = spawnEntity('baddie', {
+            x = seat.x + math.random(-5, 5),
+            y = seat.y + math.random(-2, 2),
+            seat = seat
+          })
+          break
+        end
       end
     end
-  end
-  -- Update entities
-  for _, entity in ipairs(entities) do
-    entity.framesAlive = entity.framesAlive + 1
-    entity.timeAlive = entity.timeAlive + dt
-    entity:update(dt)
-  end
-  -- Add newly spawned entities to the game
-  addNewEntitiesToGame()
-  -- Remove dead entities from the game
-  removeDeadEntitiesFromGame()
-  -- Update controllers
-  mouseAndKeyboardController:update(dt)
-  for i = #joystickControllers, 1, -1 do
-    local controller = joystickControllers[i]
-    if not controller:isActive() then
-      table.remove(joystickControllers, i)
-    else
-      controller:update(dt)
+    -- Update entities
+    for _, entity in ipairs(entities) do
+      entity.framesAlive = entity.framesAlive + 1
+      entity.timeAlive = entity.timeAlive + dt
+      entity:update(dt)
     end
-  end
-  -- Try switching controllers after controller disconnects
-  if playerControllers[1] and not playerControllers[1]:isActive() then
-    if playerControllers[2] == mouseAndKeyboardController then
-      playerControllers[2] = nil
+    -- Add newly spawned entities to the game
+    addNewEntitiesToGame()
+    -- Remove dead entities from the game
+    removeDeadEntitiesFromGame()
+    -- Update controllers
+    mouseAndKeyboardController:update(dt)
+    for i = #joystickControllers, 1, -1 do
+      local controller = joystickControllers[i]
+      if not controller:isActive() then
+        table.remove(joystickControllers, i)
+      else
+        controller:update(dt)
+      end
     end
-    playerControllers[1] = mouseAndKeyboardController
-  end
-  if playerControllers[2] and not playerControllers[2]:isActive() then
-    if playerControllers[1] == mouseAndKeyboardController then
-      playerControllers[2] = nil
-    else
-      playerControllers[2] = mouseAndKeyboardController
+    -- Try switching controllers after controller disconnects
+    if playerControllers[1] and not playerControllers[1]:isActive() then
+      if playerControllers[2] == mouseAndKeyboardController then
+        playerControllers[2] = nil
+      end
+      playerControllers[1] = mouseAndKeyboardController
+    end
+    if playerControllers[2] and not playerControllers[2]:isActive() then
+      if playerControllers[1] == mouseAndKeyboardController then
+        playerControllers[2] = nil
+      else
+        playerControllers[2] = mouseAndKeyboardController
+      end
     end
   end
 end
 
 function love.draw()
-  local level = LEVELS[levelNumber]
-  local screenShakeX = 0
-  if shakeFrames > 0 and freezeFrames <= 0 then
-    local maginitude = math.min(math.max(0.12, shakeFrames / 6), 1.75)
-    screenShakeX = maginitude * (2 * (levelFrame % 2) - 1)
-  end
-  local isAtStop = (levelPhase == 'doors-opening' or levelPhase == 'passengers-boarding' or levelPhase == 'doors-closing')
-  local playerMissingHealth = (players[1] and players[1].health < 68) or (players[2] and players[2].health < 68)
-  local playerChangedHealthRecently = (players[1] and players[1].framesSinceHealthChanged < 240) or (players[2] and players[2].framesSinceHealthChanged < 240)
-  local shouldDrawHealthBars = playerChangedHealthRecently or (playerMissingHealth and (isAtStop or levelFrame % 280 > 140))
-  -- Clear the screen
-  love.graphics.clear(COLOR.WHITE)
-  -- Draw the background
-  love.graphics.push()
-  love.graphics.translate(screenShakeX, 0)
-  drawSprite(1, 1, 300, 183, 0, 9)
-  -- Draw player health
-  if shouldDrawHealthBars then
-    love.graphics.setColor(COLOR.PURE_WHITE)
-    drawSprite(196, 379, 90, 11, 106, 12)
-    for p = 1, #players do
-      local player = players[p]
-      love.graphics.setColor(COLOR.WHITE)
-      love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.max(player.health, player.delayedHealth) / 100), 5)
-      love.graphics.setColor(player.color)
-      love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.min(player.health, player.delayedHealth) / 100), 5)
+  if isShowingTitleScreen then
+    -- Clear the screen
+    love.graphics.clear(COLOR.DARK_GREY)
+    drawSprite(302, 1, 133, 106, 84, 20)
+    if levelFrame % 100 < 80 then
+      drawSprite(302, 108, 86, 15, 108, 145)
     end
-  -- Draw stop display
+    drawSprite(302, 124, 86, 6, 108, 180)
   else
-    love.graphics.setColor(COLOR.LIGHT_GREY)
-    love.graphics.rectangle('fill', 116, 20, 71, 1)
-    love.graphics.setColor(COLOR.PURE_WHITE)
-    for i = 1, 7 do
-      local x = 103 + 11 * i
-      local y = 17
-      local stopFrame
-      if i < stopNumber then
-        stopFrame = 3
-      elseif i > stopNumber then
-        stopFrame = 1
-      else
-        stopFrame = 2
-      end
-      drawSprite(240 + 8 * (stopFrame - 1), 185, 7, 7, x, y)
-      if i == stopNumber and (not isAtStop or levelFrame % 60 < 40) then
-        drawSprite(isAtStop and 286 or 264, 185, 21, 7, x - 7, y - 7)
-      end
+    local level = LEVELS[levelNumber]
+    local screenShakeX = 0
+    if shakeFrames > 0 and freezeFrames <= 0 then
+      local maginitude = math.min(math.max(0.12, shakeFrames / 6), 1.75)
+      screenShakeX = maginitude * (2 * (levelFrame % 2) - 1)
     end
-  end
-  -- Draw doors
-  local doorSprite
-  if levelPhase == 'doors-opening' then
-    doorSprite = math.min(math.max(1, math.ceil(levelFrame / 7)), 5)
-  elseif levelPhase == 'passengers-boarding' then
-    doorSprite = 5
-  elseif levelPhase == 'doors-closing' then
-    doorSprite = math.min(math.max(0, 6 - math.ceil(levelFrame / 7)), 5)
-  else
-    doorSprite = 0
-  end
-  if doorSprite > 0 then
-    love.graphics.setColor(COLOR.PURE_WHITE)
-    local sx = 1 + 39 * (doorSprite - 1)
-    if level.doors == 'top' then
-      drawSprite(sx, 379, 38, 33, 60, 32)
-      drawSprite(sx, 379, 38, 33, 202, 32, true)
+    local isAtStop = (levelPhase == 'doors-opening' or levelPhase == 'passengers-boarding' or levelPhase == 'doors-closing')
+    local playerMissingHealth = (players[1] and players[1].health < 68) or (players[2] and players[2].health < 68)
+    local playerChangedHealthRecently = (players[1] and players[1].framesSinceHealthChanged < 240) or (players[2] and players[2].framesSinceHealthChanged < 240)
+    local shouldDrawHealthBars = playerChangedHealthRecently or (playerMissingHealth and (isAtStop or levelFrame % 280 > 140))
+    -- Clear the screen
+    love.graphics.clear(COLOR.WHITE)
+    -- Draw the background
+    love.graphics.push()
+    love.graphics.translate(screenShakeX, 0)
+    drawSprite(1, 1, 300, 183, 0, 9)
+    -- Draw player health
+    if shouldDrawHealthBars then
+      love.graphics.setColor(COLOR.PURE_WHITE)
+      drawSprite(196, 379, 90, 11, 106, 12)
+      for p = 1, #players do
+        local player = players[p]
+        love.graphics.setColor(COLOR.WHITE)
+        love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.max(player.health, player.delayedHealth) / 100), 5)
+        love.graphics.setColor(player.color)
+        love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.min(player.health, player.delayedHealth) / 100), 5)
+      end
+    -- Draw stop display
     else
-      drawSprite(sx, 413, 38, 19, 60, 168)
-      drawSprite(sx, 413, 38, 19, 202, 168, true)
-    end
-  end
-  -- Draw instructions
-  if levelNumber == 1 and levelPhase == 'in-transit' then
-    local x = (#joystickControllers > 0) and 289 or 354
-    love.graphics.setColor(COLOR.PURE_WHITE)
-    if levelFrame > 60 then
-      drawSprite(x, 193, 64, 38, 35, 95)
-    end
-    if levelFrame > 120 then
-      drawSprite(x, 232, 64, 38, 118, 75)
-    end
-    if levelFrame > 180 then
-      drawSprite(x, 271, 64, 38, 201, 95)
-    end
-  end
-  love.graphics.pop()
-  -- Draw the game state
-  love.graphics.push()
-  love.graphics.translate(GAME_X + screenShakeX, GAME_Y)
-  if DEBUG_DRAW_MODE then
-    love.graphics.setColor(COLOR.DEBUG_BLUE)
-    love.graphics.rectangle('line', 0, 0, GAME_WIDTH, GAME_HEIGHT)
-  end
-  -- Draw entities
-  for renderLayer = 1, 6 do
-    for _, entity in ipairs(entities) do
-      if not entity.renderLayer or entity.renderLayer == renderLayer then
-        love.graphics.setColor(COLOR.PURE_WHITE)
-        entity:draw(renderLayer)
+      love.graphics.setColor(COLOR.LIGHT_GREY)
+      love.graphics.rectangle('fill', 116, 20, 71, 1)
+      love.graphics.setColor(COLOR.PURE_WHITE)
+      for i = 1, 7 do
+        local x = 103 + 11 * i
+        local y = 17
+        local stopFrame
+        if i < stopNumber then
+          stopFrame = 3
+        elseif i > stopNumber then
+          stopFrame = 1
+        else
+          stopFrame = 2
+        end
+        drawSprite(240 + 8 * (stopFrame - 1), 185, 7, 7, x, y)
+        if i == stopNumber and (not isAtStop or levelFrame % 60 < 40) then
+          drawSprite(isAtStop and 286 or 264, 185, 21, 7, x - 7, y - 7)
+        end
       end
     end
+    -- Draw doors
+    local doorSprite
+    if levelPhase == 'doors-opening' then
+      doorSprite = math.min(math.max(1, math.ceil(levelFrame / 7)), 5)
+    elseif levelPhase == 'passengers-boarding' then
+      doorSprite = 5
+    elseif levelPhase == 'doors-closing' then
+      doorSprite = math.min(math.max(0, 6 - math.ceil(levelFrame / 7)), 5)
+    else
+      doorSprite = 0
+    end
+    if doorSprite > 0 then
+      love.graphics.setColor(COLOR.PURE_WHITE)
+      local sx = 1 + 39 * (doorSprite - 1)
+      if level.doors == 'top' then
+        drawSprite(sx, 379, 38, 33, 60, 32)
+        drawSprite(sx, 379, 38, 33, 202, 32, true)
+      else
+        drawSprite(sx, 413, 38, 19, 60, 168)
+        drawSprite(sx, 413, 38, 19, 202, 168, true)
+      end
+    end
+    -- Draw instructions
+    if levelNumber == 1 and levelPhase == 'in-transit' then
+      local x = (#joystickControllers > 0) and 289 or 354
+      love.graphics.setColor(COLOR.PURE_WHITE)
+      if levelFrame > 60 then
+        drawSprite(x, 193, 64, 38, 35, 95)
+      end
+      if levelFrame > 120 then
+        drawSprite(x, 232, 64, 38, 118, 75)
+      end
+      if levelFrame > 180 then
+        drawSprite(x, 271, 64, 38, 201, 95)
+      end
+    end
+    love.graphics.pop()
+    -- Draw the game state
+    love.graphics.push()
+    love.graphics.translate(GAME_X + screenShakeX, GAME_Y)
+    if DEBUG_DRAW_MODE then
+      love.graphics.setColor(COLOR.DEBUG_BLUE)
+      love.graphics.rectangle('line', 0, 0, GAME_WIDTH, GAME_HEIGHT)
+    end
+    -- Draw entities
+    for renderLayer = 1, 6 do
+      for _, entity in ipairs(entities) do
+        if not entity.renderLayer or entity.renderLayer == renderLayer then
+          love.graphics.setColor(COLOR.PURE_WHITE)
+          entity:draw(renderLayer)
+        end
+      end
+    end
+    love.graphics.pop()
   end
-  love.graphics.pop()
 end
 
 -- Assign controllers as they're added
