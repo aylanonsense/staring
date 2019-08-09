@@ -142,44 +142,115 @@ local SEATS = {
   { x = 217, y = 78, priority = 4 },
 }
 local LEVELS = {
+  -- LEVEL 1
   {
     numPassengers = 3,
     doors = 'top',
-    quarterBeat = 20,
+    beat = 20,
     pattern = {
-      { pause = 4, charge = 4, shoot = 2 },
-      { pause = 6 }
+      { pause = 4, charge = 6, shoot = 4 },
+      { pause = 12 }
     }
   },
+  -- LEVEL 2
   {
-    numPassengers = 10,
+    numPassengers = 8,
     doors = 'top',
-    quarterBeat = 15,
-    defaultAttributes = {
-      baddieMethod = 'random',
-      angleSpread = 0.2
-    },
+    beat = 20,
     pattern = {
-      { pause = 2, charge = 8, shoot = 6, angleSpread = 0 },
-      { pause = 2, charge = 6, shoot = 6 },
-      { pause = 2, charge = 6, shoot = 4 },
-      { pause = 1, charge = 5, shoot = 4 },
-      { pause = 1, charge = 6, shoot = 2 },
+      { pause = 4, charge = 6, shoot = 4 },
+      { pause = 1, charge = 5, shoot = 4, angleSpread = 0.1 },
+      { pause = 1, charge = 4, shoot = 4, angleSpread = 0.1 },
       { pause = 8 }
     }
   },
+  -- LEVEL 3
   {
-    numPassengers = 10,
+    numPassengers = 15,
     doors = 'top',
-    quarterBeat = 15,
-    defaultAttributes = {
-      baddieMethod = 'leftmost'
-    },
+    beat = 16,
     pattern = {
-      { pause = 30, charge = 60, shoot = 90 },
-      { pause = 30, charge = 60, shoot = 60 },
-      { pause = 30, charge = 60, shoot = 30 },
-      { pause = 120 } 
+      { pause = 4, charge = 8, shoot = 8, angle = 90, baddieMethod = 'upper' },
+      { pause = 2, charge = 6, shoot = 8, angle = 270, baddieMethod = 'lower' },
+      { pause = 2, charge = 6, shoot = 6, angle = 90, baddieMethod = 'upper' },
+      { pause = 1, charge = 5, shoot = 6, angle = 270, baddieMethod = 'lower' },
+      { pause = 4 },
+      { pause = 4, charge = 8, shoot = 8, angle = 45, baddieMethod = 'upper-left' },
+      { pause = 2, charge = 6, shoot = 8, angle = 135, baddieMethod = 'upper-right' },
+      { pause = 2, charge = 6, shoot = 6, angle = 315, baddieMethod = 'lower-left' },
+      { pause = 1, charge = 5, shoot = 6, angle = 225, baddieMethod = 'lower-right' },
+      { pause = 4 },
+    }
+  },
+  -- LEVEL 4
+  {
+    numPassengers = 18,
+    doors = 'top',
+    beat = 18,
+    pattern = {
+      { pause = 4, charge = 4, shoot = 12, angle = 90+30, rotation = -8, baddieMethod = 'upper-left' },
+      { pause = 12, charge = 4, shoot = 12, angle = 180+30, rotation = -8, baddieMethod = 'upper-right' },
+      { pause = 12, charge = 4, shoot = 12, angle = 270+30, rotation = -8, baddieMethod = 'lower-right' },
+      { pause = 12, charge = 4, shoot = 12, angle = 0+30, rotation = -8, baddieMethod = 'lower-left' },
+      { pause = 8 }
+    }
+  },
+  -- LEVEL 5
+  {
+    numPassengers = 24,
+    doors = 'top',
+    beat = 20,
+    pattern = {
+      { pause = 2, charge = 2, shoot = 2, rotation = 1 },
+      { pause = 1, charge = 2, shoot = 2, rotation = -1 },
+      { pause = 2, charge = 2, shoot = 2, rotation = 1 },
+      { pause = 1, charge = 2, shoot = 2, rotation = -1 },
+      { pause = 2, charge = 2, shoot = 2, rotation = 1 },
+      { pause = 1, charge = 2, shoot = 2, rotation = -1 },
+      { pause = 2, charge = 2, shoot = 2, rotation = 1 },
+      { pause = 1, charge = 2, shoot = 2, rotation = -1 },
+      { pause = 7 }
+    }
+  },
+  -- LEVEL 6
+  {
+    numPassengers = 25,
+    doors = 'top',
+    beat = 4,
+    defaultAttributes = { angleSpread = 100 },
+    pattern = {
+      { pause = 1, charge = 18, shoot = 12 },
+      { pause = 1, charge = 17, shoot = 12 },
+      { pause = 1, charge = 16, shoot = 12 },
+      { pause = 1, charge = 15, shoot = 12 },
+      { pause = 1, charge = 14, shoot = 12 },
+      { pause = 1, charge = 13, shoot = 12 },
+      { pause = 1, charge = 12, shoot = 12 },
+      { pause = 1, charge = 11, shoot = 12 },
+      { pause = 1, charge = 10, shoot = 12 },
+      { pause = 1, charge = 9, shoot = 12 },
+      { pause = 1, charge = 8, shoot = 12 },
+      { pause = 48 }
+    }
+  },
+  -- LEVEL 7
+  {
+    numPassengers = 36,
+    doors = 'top',
+    beat = 20,
+    defaultAttributes = { angleSpread = 180, rotation = 10 },
+    pattern = {
+      { pause = 2, charge = 4, shoot = 20 },
+      { pause = 2, charge = 4, shoot = 20 },
+      { pause = 2, charge = 4, shoot = 20 },
+      { pause = 2, charge = 4, shoot = 20 },
+      { pause = 2, charge = 4, shoot = 20 },
+      { pause = 2, charge = 4, shoot = 20 },
+      { pause = 2, charge = 4, shoot = 20 },
+      { pause = 2, charge = 4, shoot = 20 },
+      { pause = 2, charge = 4, shoot = 20 },
+      { pause = 2, charge = 4, shoot = 20 },
+      { pause = 20 }
     }
   }
 }
@@ -329,7 +400,7 @@ local ENTITY_CLASSES = {
             local dx = eyeX - obstacleEyeX
             local dy = eyeY - obstacleEyeY
             local dist = math.sqrt(dx * dx + dy * dy)
-            if obstacle.type == 'player' or (obstacle.type == 'baddie' and obstacle.isActive) then
+            if obstacle.type == 'player' or (obstacle.type == 'baddie' and obstacle.isActive) then -- and (not obstacle.attackPhase or obstacle.attackPhase == 'aiming' or obstacle.attackPhase == 'pausing')) then
               local fudgeRadius = (obstacle.type == 'baddie' or obstacle.health < 100) and math.min(math.max(0, dist / 15 - 1.5), 10) or 0
               local isIntersecting, x, y = calcCircleLineIntersection(self.x, self.y, self.targetX, self.targetY, obstacleEyeX, obstacleEyeY, obstacle.eyeRadius + fudgeRadius)
               if isIntersecting then
@@ -402,19 +473,19 @@ local ENTITY_CLASSES = {
         local speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
         local bodySprite
         if self.damageFrames > 0 then
-          bodySprite = 9
+          bodySprite = 13
           flip = self.framesAlive % 6 < 3
         elseif self.health <= 0 then
-          bodySprite = 10
+          bodySprite = 14
         elseif self.framesSinceStoppedMoving > 0 and self.framesSinceStoppedMoving <= 8 then
-          bodySprite = self.framesSinceStoppedMoving <= 4 and 7 or 8
+          bodySprite = self.framesSinceStoppedMoving <= 4 and 11 or 12
         elseif speed > 10 then
           local angle = (math.atan2(self.facingY, self.facingX) + 2.5 * math.pi) % (2 * math.pi)
           if angle > math.pi then
             angle = 2 * math.pi - angle
           end
           angle = angle / math.pi
-          angle = math.floor(4 * angle + 0.5)
+          angle = math.floor(8 * angle + 0.5)
           bodySprite = 2 + angle
         else
           bodySprite = 1
@@ -578,7 +649,10 @@ local ENTITY_CLASSES = {
       local pupilJitterX = pupilJitterMult * (1.5 * math.random() - 0.75)
       local pupilJitterY = pupilJitterMult * (1.5 * math.random() - 0.75)
       -- Update eye
-      if self.attackPhase then
+      if self.attackPhase == 'aiming' or self.attackPhase == 'charging' or self.attackPhase == 'shooting' then
+        if self.attackAngleRotation then
+          self.attackAngle = self.attackAngle + self.attackAngleRotation * dt
+        end
         -- Update eye position
         if self.attackPhase == 'aiming' then
           self:setEyeWhiteAngle(self.attackAngle, 0.5)
@@ -647,7 +721,13 @@ local ENTITY_CLASSES = {
         end
       end
       -- Spawn poofs every so often while being targeted
-      if self.isBeingTargeted and self.framesAlive % 5 == 0 then
+      local poofFreq
+      if self.attackPhase == 'charging' or self.attackPhase == 'shooting' or self.attackPhase == 'aiming' then
+        poofFreq = 20
+      else
+        poofFreq = 3
+      end
+      if self.isBeingTargeted and self.framesAlive % poofFreq == 0 then
         local eyeX, eyeY = self:getEyePosition()
         spawnEntity('poof', {
           x = eyeX,
@@ -659,8 +739,20 @@ local ENTITY_CLASSES = {
         })
       end
       -- Destroy if targeted for too long
-      self.timeSpentTargeted = math.max(0.00, self.timeSpentTargeted + (self.isBeingTargeted and dt or -dt / 4))
-      if self.timeSpentTargeted > 1.10 then
+      local targetMult
+      if self.isBeingTargeted then
+        if self.attackPhase == 'charging' or self.attackPhase == 'shooting' then
+          targetMult = 0.25
+        elseif self.attackPhase == 'aiming' then
+          targetMult = 0.35
+        else
+          targetMult = 1
+        end
+      else
+        targetMult = -0.10
+      end
+      self.timeSpentTargeted = math.max(0.00, self.timeSpentTargeted + targetMult * dt)
+      if self.timeSpentTargeted > 0.45 then
         self:destroy()
         shakeFrames = math.max(8, shakeFrames)
         local playerPupilX, playerPupilY = closestPlayer:getPupilPosition()
@@ -744,9 +836,10 @@ local ENTITY_CLASSES = {
         end
       elseif renderLayer == 5 then
         -- Draw laser
+        love.graphics.setColor(COLOR.RED)
         local pupilX, pupilY = self:getPupilPosition()
+        local eyeX, eyeY = self:getEyePosition()
         if self.attackPhase and self.targetX and self.targetY then
-          love.graphics.setColor(COLOR.RED)
           if self.attackPhase == 'aiming' then
             drawPixelatedLine(pupilX, pupilY, self.targetX, self.targetY, 1, 4, 4)
           elseif (self.attackPhase == 'charging' and self.attackPhaseFrames % 6 < 2) or self.attackPhase == 'cooldown' then
@@ -777,7 +870,7 @@ local ENTITY_CLASSES = {
         local dx = player.x - self.x
         local dy = player.y - self.y
         local squareDist = dx * dx + dy * dy
-        if (not closestPlayer or squareDist < closestPlayerSquareDist or (not closestPlayerIsTargeting and player.target == self)) and (not closestPlayerIsTargeting or player.target == self) then
+        if (not closestPlayer or squareDist < closestPlayerSquareDist or (not closestPlayerIsTargeting and player.target == self)) and (not closestPlayerIsTargeting or player.target == self) and (player.health > 0 or not closestPlayer or closestPlayer.health <= 0) then
           closestPlayer = player
           closestPlayerSquareDist = squareDist
           closestPlayerIsTargeting = (player.target == self)
@@ -785,7 +878,7 @@ local ENTITY_CLASSES = {
       end
       return closestPlayer
     end,
-    attack = function(self, aimFrames, shootFrames, angle, isDeviation)
+    attack = function(self, aimFrames, shootFrames, angle, isDeviation, angleRotation)
       self.isActive = true
       self.shootFrames = shootFrames
       self.timeUntilBlink = 0.00
@@ -793,6 +886,7 @@ local ENTITY_CLASSES = {
       self.attackPhase = 'aiming'
       self.attackPhaseFrames = 0
       self.framesUntilNextAttackPhase = aimFrames - 14
+      self.attackAngleRotation = angleRotation
       if not angle or isDeviation then
         local target = self:getClosestPlayer()
         local targetEyeX, targetEyeY = target:getEyeWhitePosition()
@@ -965,6 +1059,7 @@ function love.update(dt)
     levelFrame = 0
   elseif levelPhase == 'stopping' and levelFrame > (DEBUG_SPEED_MODE and 0 or 30) then
     levelNumber = levelNumber + 1
+    laserSchedule = {}
     levelPhase = 'doors-opening'
     levelFrame = 0
   end
@@ -975,9 +1070,23 @@ function love.update(dt)
       if task.pause then
         task.pause = task.pause - 1
       end
-      if task.shoot and not task.baddie and (not task.pause or task.pause <= level.quarterBeat or task.pause % level.quarterBeat == 2 or task.pause % level.quarterBeat == 4) then
-        if task.baddieMethod == 'leftmost' then
-          task.baddie = getLeftmostBaddie()
+      if task.shoot and not task.baddie and (not task.pause or task.pause <= level.beat or task.pause == 2 * level.beat or task.pause == 2 * level.beat - 1 or task.pause == 4 * level.beat or task.pause == 4 * level.beat - 1) then
+        if task.baddieMethod == 'upper' then
+          task.baddie = getUpperBaddie()
+        elseif task.baddieMethod == 'lower' then
+          task.baddie = getLowerBaddie()
+        elseif task.baddieMethod == 'left' then
+          task.baddie = getLeftBaddie()
+        elseif task.baddieMethod == 'right' then
+          task.baddie = getRightBaddie()
+        elseif task.baddieMethod == 'upper-left' then
+          task.baddie = getUpperLeftBaddie()
+        elseif task.baddieMethod == 'upper-right' then
+          task.baddie = getUpperRightBaddie()
+        elseif task.baddieMethod == 'lower-left' then
+          task.baddie = getLowerLeftBaddie()
+        elseif task.baddieMethod == 'lower-right' then
+          task.baddie = getLowerRightBaddie()
         else
           task.baddie = getRandomBaddie()
         end
@@ -999,7 +1108,11 @@ function love.update(dt)
             angle = task.angleSpread
             isDeviation = true
           end
-          task.baddie:attack(task.charge, task.shoot, angle, isDeviation)
+          if angle then
+            angle = angle * math.pi / 180
+          end
+          local rotation = (task.rotation and (task.rotation * (math.pi / 180) * (60 / level.beat)) or 0) 
+          task.baddie:attack(task.charge, task.shoot, angle, isDeviation, rotation)
         end
         table.remove(laserSchedule, 1)
       end
@@ -1016,13 +1129,13 @@ function love.update(dt)
           task[k] = v
         end
         if task.pause then
-          task.pause = task.pause * level.quarterBeat
+          task.pause = task.pause * level.beat
         end
         if task.charge then
-          task.charge = task.charge * level.quarterBeat
+          task.charge = task.charge * level.beat
         end
         if task.shoot then
-          task.shoot = task.shoot * level.quarterBeat
+          task.shoot = task.shoot * level.beat
         end
         table.insert(laserSchedule, task)
       end
@@ -1047,8 +1160,8 @@ function love.update(dt)
         -- Spawn a passenger in that seat
         numPassengersLeftToBoard = numPassengersLeftToBoard - 1
         seat.passenger = spawnEntity('baddie', {
-          x = seat.x,
-          y = seat.y,
+          x = seat.x + math.random(-5, 5),
+          y = seat.y + math.random(-2, 2),
           seat = seat
         })
         break
@@ -1124,8 +1237,8 @@ function love.draw()
     love.graphics.setColor(COLOR.LIGHT_GREY)
     love.graphics.rectangle('fill', 116, 20, 71, 1)
     love.graphics.setColor(COLOR.PURE_WHITE)
-    for i = 1, 8 do
-      local x = 103 + 10 * i
+    for i = 1, 7 do
+      local x = 103 + 11 * i
       local y = 17
       local stopFrame
       if i < stopNumber then
@@ -1326,7 +1439,7 @@ function getBestBaddie(criteria)
   for _, baddie in ipairs(baddies) do
     if not baddie.attackPhase or baddie.attackPhase == 'pausing' then
       local score = criteria(baddie)
-      if not bestBaddie or score < bestScore then
+      if score and (not bestBaddie or score > bestScore) then
         bestBaddie = baddie
         bestScore = score
       end
@@ -1341,9 +1454,67 @@ function getRandomBaddie()
   end)
 end
 
-function getLeftmostBaddie()
+function getUpperBaddie()
   return getBestBaddie(function(baddie)
-    return baddie.x
+    if baddie.y <= 0.6 * GAME_HEIGHT then
+      return 35 * math.random() - baddie.y
+    end
+  end)
+end
+
+function getLowerBaddie()
+  return getBestBaddie(function(baddie)
+    if baddie.y >= 0.4 * GAME_HEIGHT then
+      return 35 * math.random() + baddie.y
+    end
+  end)
+end
+
+function getLeftBaddie()
+  return getBestBaddie(function(baddie)
+    if baddie.x <= 0.6 * GAME_WIDTH then
+      return 55 * math.random() - baddie.x
+    end
+  end)
+end
+
+function getRightBaddie()
+  return getBestBaddie(function(baddie)
+    if baddie.x >= 0.4 * GAME_WIDTH then
+      return 55 * math.random() + baddie.x
+    end
+  end)
+end
+
+function getLowerLeftBaddie()
+  return getBestBaddie(function(baddie)
+    if baddie.x <= 0.6 * GAME_WIDTH and baddie.y >= 0.4 * GAME_HEIGHT then
+      return 55 * math.random() - baddie.x + 35 * math.random() + baddie.y
+    end
+  end)
+end
+
+function getLowerRightBaddie()
+  return getBestBaddie(function(baddie)
+    if baddie.x >= 0.4 * GAME_WIDTH and baddie.y >= 0.4 * GAME_HEIGHT then
+      return 55 * math.random() + baddie.x + 35 * math.random() + baddie.y
+    end
+  end)
+end
+
+function getUpperLeftBaddie()
+  return getBestBaddie(function(baddie)
+    if baddie.x <= 0.6 * GAME_WIDTH and baddie.y <= 0.6 * GAME_HEIGHT then
+      return 55 * math.random() - baddie.x + 35 * math.random() - baddie.y
+    end
+  end)
+end
+
+function getUpperRightBaddie()
+  return getBestBaddie(function(baddie)
+    if baddie.x >= 0.4 * GAME_WIDTH and baddie.y <= 0.6 * GAME_HEIGHT then
+      return 55 * math.random() + baddie.x + 35 * math.random() - baddie.y
+    end
   end)
 end
 
@@ -1408,6 +1579,17 @@ function drawPixelatedLine(x1, y1, x2, y2, thickness, gaps, dashes)
       end
       i = i + (y1 < y2 and 1 or -1)
     end
+  end
+end
+
+function drawPixelatedCircle(x, y, r, numPoints, thickness, gaps, dashes)
+  numPoints = numPoints or 8
+  for i = 1, numPoints do
+    local x1 = x + r * math.cos(2 * math.pi * (i - 1) / numPoints)
+    local y1 = y + r * math.sin(2 * math.pi * (i - 1) / numPoints)
+    local x2 = x + r * math.cos(2 * math.pi * i / numPoints)
+    local y2 = y + r * math.sin(2 * math.pi * i / numPoints)
+    drawPixelatedLine(x1, y1, x2, y2, thickness, gaps, dashes)
   end
 end
 
