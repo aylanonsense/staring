@@ -258,6 +258,7 @@ local LEVELS = {
 
 -- Assets
 local spriteSheet
+local sounds
 
 -- Input variables
 local blankController
@@ -345,6 +346,7 @@ local ENTITY_CLASSES = {
       if controller:justStartedDashing() and self.dashCooldown <= 0.00 and self.damageFrames <= 0 and self.health > 0 then
         self.isAiming = false
         self.isDashing = true
+        love.audio.play(sounds.shoop:clone())
         self.invincibilityFrames = math.max(60 * PLAYER_DASH_INVINCIBILITY, self.invincibilityFrames)
         self.dashDuration = PLAYER_DASH_DURATION
         self.dashCooldown = PLAYER_DASH_DURATION + PLAYER_DASH_COOLDOWN
@@ -548,6 +550,7 @@ local ENTITY_CLASSES = {
     end,
     damage = function(self)
       if self:canBeDamaged() then
+        love.audio.play(sounds.blomp:clone())
         shakeFrames = math.max(shakeFrames, 25)
         freezeFrames = math.max(freezeFrames, 3)
         self.isAiming = false
@@ -617,6 +620,7 @@ local ENTITY_CLASSES = {
       end
     end,
     update = function(self, dt)
+      local wasBeingTargeted = self.isBeingTargeted
       -- Advance attack stages
       if self.attackPhase then
         self.attackPhaseFrames = self.attackPhaseFrames + 1
@@ -630,6 +634,11 @@ local ENTITY_CLASSES = {
             shakeFrames = math.max(2, shakeFrames)
             self.attackPhase = 'shooting'
             self.framesUntilNextAttackPhase = self.shootFrames
+            if self.aimNoise then
+              love.audio.pause(self.aimNoise)
+            end
+            self.shootNoise = sounds.bzew:clone()
+            love.audio.play(self.shootNoise)
           elseif self.attackPhase == 'shooting' then
             self.attackPhase = 'cooldown'
             self.framesUntilNextAttackPhase = 7
@@ -751,13 +760,20 @@ local ENTITY_CLASSES = {
           speed = 100 + 100 * math.random()
         })
       end
+      if self.isBeingTargeted and not wasBeingTargeted then
+        self.targetedNoise = sounds.brr:clone()
+        love.audio.play(self.targetedNoise)
+      end
+      if not self.isBeingTargeted and self.targetedNoise then
+        love.audio.pause(self.targetedNoise)
+      end
       -- Destroy if targeted for too long
       local targetMult
       if self.isBeingTargeted then
         if self.attackPhase == 'charging' or self.attackPhase == 'shooting' then
-          targetMult = 0.25
-        elseif self.attackPhase == 'aiming' then
           targetMult = 0.35
+        elseif self.attackPhase == 'aiming' then
+          targetMult = 0.50
         else
           targetMult = 1
         end
@@ -767,6 +783,16 @@ local ENTITY_CLASSES = {
       self.timeSpentTargeted = math.max(0.00, self.timeSpentTargeted + targetMult * dt)
       if self.timeSpentTargeted > 0.45 then
         self:destroy()
+        if self.aimNoise then
+          love.audio.pause(self.aimNoise)
+        end
+        if self.shootNoise then
+          love.audio.pause(self.shootNoise)
+        end
+        if self.targetedNoise then
+          love.audio.pause(self.targetedNoise)
+        end
+        love.audio.play(sounds.pff:clone())
         shakeFrames = math.max(8, shakeFrames)
         local playerPupilX, playerPupilY = closestPlayer:getPupilPosition()
         local eyeX, eyeY = self:getEyePosition()
@@ -897,6 +923,8 @@ local ENTITY_CLASSES = {
       self.timeUntilBlink = 0.00
       self.blinkFrames = 0
       self.attackPhase = 'aiming'
+      self.aimNoise = sounds.brsh:clone()
+      love.audio.play(self.aimNoise)
       self.attackPhaseFrames = 0
       self.framesUntilNextAttackPhase = aimFrames - 14
       self.attackAngleRotation = angleRotation
@@ -1019,6 +1047,20 @@ function love.load()
   love.graphics.setDefaultFilter('nearest', 'nearest')
   -- Load assets
   spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
+  sounds = {
+    blomp = love.audio.newSource('sfx/blomp.wav', 'static'),
+    bop = love.audio.newSource('sfx/bop.wav', 'static'),
+    brr = love.audio.newSource('sfx/brr.wav', 'static'),
+    brsh = love.audio.newSource('sfx/brsh.wav', 'static'),
+    burp = love.audio.newSource('sfx/burp.wav', 'static'),
+    bzew = love.audio.newSource('sfx/bzew.wav', 'static'),
+    ding = love.audio.newSource('sfx/ding.wav', 'static'),
+    hanheer = love.audio.newSource('sfx/hanheer.wav', 'static'),
+    kshoo = love.audio.newSource('sfx/kshoo.wav', 'static'),
+    pff = love.audio.newSource('sfx/pff.wav', 'static'),
+    puh = love.audio.newSource('sfx/puh.wav', 'static'),
+    shoop = love.audio.newSource('sfx/shoop.wav', 'static'),
+  }
   -- Create controllers
   blankController = Controllers.BlankController:new()
   mouseAndKeyboardController = Controllers.MouseAndKeyboardController:new()
@@ -1028,6 +1070,17 @@ end
 
 function love.update(dt)
   gameFrame = gameFrame + 1
+  if not DEBUG_SPEED_MODE and not isShowingTitleScreen then
+    if gameFrame == 70 or gameFrame == 150 or gameFrame == 230 then
+      love.audio.play(sounds.burp:clone())
+    end
+    if gameFrame == 310 then
+      love.audio.play(sounds.bop:clone())
+    end
+    if gameFrame == 390 then
+      love.audio.play(sounds.ding:clone())
+    end
+  end
   local level = LEVELS[levelNumber]
   -- Freeze the screen
   if freezeFrames > 0 then
@@ -1039,6 +1092,7 @@ function love.update(dt)
     for p = 1, 2 do
       if playerControllers[p] and playerControllers[p]:justPressedAnything() then
         isShowingTitleScreen = false
+        love.audio.play(sounds.ding:clone())
         levelNumber = 0
         levelPhase = 'stopping'
         levelFrame = 0
@@ -1052,20 +1106,20 @@ function love.update(dt)
           x = GAME_WIDTH / 2 - 25,
           y = GAME_HEIGHT / 2 + 10
         })
-        spawnEntity('player', {
-          playerNum = 2,
-          aimX = -1,
-          color = COLOR.GREEN,
-          x = GAME_WIDTH / 2 + 25,
-          y = GAME_HEIGHT / 2 + 10
-        })
+        -- spawnEntity('player', {
+        --   playerNum = 2,
+        --   aimX = -1,
+        --   color = COLOR.GREEN,
+        --   x = GAME_WIDTH / 2 + 25,
+        --   y = GAME_HEIGHT / 2 + 10
+        -- })
         addNewEntitiesToGame()
       end
     end
   elseif gameFrame > (DEBUG_SPEED_MODE and 0 or 390) then
     levelFrame = levelFrame + 1
     -- Update level phase
-    if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
+    if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 80) then
       levelPhase = 'passengers-boarding'
       if #players == 1 then
         players[1]:regenerate()
@@ -1075,11 +1129,13 @@ function love.update(dt)
       for _, seat in ipairs(SEATS) do
         seat.passenger = nil
       end
-    elseif levelPhase == 'passengers-boarding' and numPassengersLeftToBoard <= 0 then
+    elseif levelPhase == 'passengers-boarding' and levelFrame > 245 then
       levelPhase = 'doors-closing'
+      love.audio.play(sounds.kshoo:clone())
       levelFrame = 0
-    elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 0 or 80) then
+    elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 0 or 90) then
       stopNumber = stopNumber + 1
+      love.audio.play(sounds.ding:clone())
       levelPhase = 'in-transit'
       levelFrame = 0
     elseif levelPhase == 'in-transit' and #baddies <= 0 then
@@ -1089,7 +1145,11 @@ function love.update(dt)
       levelNumber = levelNumber + 1
       laserSchedule = {}
       levelPhase = 'doors-opening'
+      love.audio.play(sounds.kshoo:clone())
       levelFrame = 0
+    end
+    if levelPhase == 'passengers-boarding' and levelFrame == 110 then
+      love.audio.play(sounds.hanheer:clone())
     end
     -- Schedule lasers
     if levelPhase == 'in-transit' then
@@ -1120,6 +1180,7 @@ function love.update(dt)
           end
           if task.baddie then
             task.baddie:activate()
+            love.audio.play(sounds.burp:clone())
           end
         end
         if not task.pause or task.pause <= 0 then
@@ -1189,6 +1250,7 @@ function love.update(dt)
           if not seat.passenger and priority <= maxPriority then
             -- Spawn a passenger in that seat
             numPassengersLeftToBoard = numPassengersLeftToBoard - 1
+            love.audio.play(sounds.puh:clone())
             seat.passenger = spawnEntity('baddie', {
               x = seat.x + math.random(-5, 5),
               y = seat.y + math.random(-2, 2),
@@ -1242,7 +1304,7 @@ function love.draw()
     love.graphics.clear(COLOR.DARK_GREY)
     -- Draw title screen
     drawSprite(302, 1, 133, 106, 84, 20)
-    if levelFrame % 100 < 80 and isShowingTitleScreen then
+    if gameFrame % 100 < 80 and isShowingTitleScreen then
       drawSprite(302, 108, 86, 15, 108, 145)
     end
     drawSprite(302, 124, 86, 6, 108, 180)
@@ -1304,11 +1366,11 @@ function love.draw()
       -- Draw doors
       local doorSprite
       if levelPhase == 'doors-opening' then
-        doorSprite = math.min(math.max(1, math.ceil(levelFrame / 7)), 5)
+        doorSprite = math.min(math.max(1, math.ceil(levelFrame / 10)), 5)
       elseif levelPhase == 'passengers-boarding' then
         doorSprite = 5
       elseif levelPhase == 'doors-closing' then
-        doorSprite = math.min(math.max(0, 6 - math.ceil(levelFrame / 7)), 5)
+        doorSprite = math.min(math.max(0, 6 - math.ceil(levelFrame / 10)), 5)
       else
         doorSprite = 0
       end

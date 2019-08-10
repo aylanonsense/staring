@@ -106,7 +106,7 @@ function JoystickController:new(joystick)
     end,
     joystickpressed = function(self, joystick, btn)
       if joystick == self._joystick then
-        self._framesSinceButton = INP
+        self._framesSinceButton = INPUT_BUFFER_FRAMES
         self._framesSinceDash = INPUT_BUFFER_FRAMES
       end
     end,
