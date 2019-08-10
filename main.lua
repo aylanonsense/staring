@@ -1062,7 +1062,7 @@ function love.update(dt)
         addNewEntitiesToGame()
       end
     end
-  elseif gameFrame > 390 then
+  elseif gameFrame > (DEBUG_SPEED_MODE and 0 or 390) then
     levelFrame = levelFrame + 1
     -- Update level phase
     if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
@@ -1237,7 +1237,7 @@ function love.update(dt)
 end
 
 function love.draw()
-  if isShowingTitleScreen or gameFrame < 60 then
+  if isShowingTitleScreen or gameFrame < (DEBUG_SPEED_MODE and 0 or 60) then
     -- Clear the screen
     love.graphics.clear(COLOR.DARK_GREY)
     -- Draw title screen
@@ -1265,7 +1265,7 @@ function love.draw()
     love.graphics.clear(COLOR.WHITE)
     love.graphics.push()
     love.graphics.translate(screenShakeX, 0)
-    if gameFrame > 310 then
+    if gameFrame > (DEBUG_SPEED_MODE and 0 or 310) then
       -- Draw the background
       drawSprite(1, 1, 300, 183, 0, 9)
       -- Draw player health
@@ -1328,13 +1328,13 @@ function love.draw()
     if levelNumber <= 0 or (levelNumber == 1 and levelPhase ~= 'stopping') then
       local x = (#joystickControllers > 0) and 289 or 354
       love.graphics.setColor(COLOR.PURE_WHITE)
-      if gameFrame > 70 then
+      if gameFrame > (DEBUG_SPEED_MODE and 0 or 70) then
         drawSprite(x, 193, 64, 38, 35, 95)
       end
-      if gameFrame > 150 then
+      if gameFrame >(DEBUG_SPEED_MODE and 0 or 150) then
         drawSprite(x, 232, 64, 38, 118, 75)
       end
-      if gameFrame > 230 then
+      if gameFrame > (DEBUG_SPEED_MODE and 0 or 230) then
         drawSprite(x, 271, 64, 38, 201, 95)
       end
     end
@@ -1347,7 +1347,7 @@ function love.draw()
       love.graphics.rectangle('line', 0, 0, GAME_WIDTH, GAME_HEIGHT)
     end
     -- Draw entities
-    if gameFrame > 390 then
+    if gameFrame > (DEBUG_SPEED_MODE and 0 or 390) then
       for renderLayer = 1, 6 do
         for _, entity in ipairs(entities) do
           if not entity.renderLayer or entity.renderLayer == renderLayer then
