@@ -3,7 +3,7 @@ local Controllers = require('src/Controller.lua')
 -- Constants
 local DEBUG_DRAW_MODE = false
 local DEBUG_SPEED_MODE = false
-local STARTING_LEVEL_NUMBER = 1
+local STARTING_LEVEL_NUMBER = 5
 local COLOR = {
   LIGHT_GREY = { 191 / 255, 190 / 255, 190 / 255 }, -- #bfbebe
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
@@ -278,6 +278,8 @@ local laserSchedule
 local shakeFrames
 local freezeFrames
 local isShowingTitleScreen
+local gameOverFrames
+local numMashedButtons
 
 -- Entity variables
 local entities
@@ -1046,6 +1048,8 @@ local ENTITY_CLASSES = {
 }
 
 function love.load()
+  numMashedButtons = 0
+  gameOverFrames = 0
   gameFrame = 0
   isShowingTitleScreen = true
   laserSchedule = {}
@@ -1069,6 +1073,7 @@ function love.load()
     burp = love.audio.newSource('sfx/burp.wav', 'static'),
     bzew = love.audio.newSource('sfx/bzew.wav', 'static'),
     ding = love.audio.newSource('sfx/ding.wav', 'static'),
+    duhdow = love.audio.newSource('sfx/duhdow.wav', 'static'),
     hanheer = love.audio.newSource('sfx/hanheer.wav', 'static'),
     kshoo = love.audio.newSource('sfx/kshoo.wav', 'static'),
     pff = love.audio.newSource('sfx/pff.wav', 'static'),
@@ -1105,7 +1110,7 @@ function love.update(dt)
   shakeFrames = math.max(0, shakeFrames - 1)
   if isShowingTitleScreen then
     for p = 1, 2 do
-      if playerControllers[p] and playerControllers[p]:justPressedAnything() then
+      if playerControllers[p] and playerControllers[p]:justPressedAnything() and isShowingTitleScreen then
         isShowingTitleScreen = false
         love.audio.play(sounds.ding:clone())
         levelNumber = STARTING_LEVEL_NUMBER - 1
@@ -1113,9 +1118,20 @@ function love.update(dt)
         levelPhase = 'stopping'
         levelFrame = 0
         gameFrame = 0
+        gameOverFrames = 0
+        numMashedButtons = 0
         -- Spawn entities
         entities = {}
         newEntities = {}
+        for i = #players, 1 do
+          table.remove(players, i)
+        end
+        for i = #baddies, 1 do
+          table.remove(baddies, i)
+        end
+        for i = #obstacles, 1 do
+          table.remove(obstacles, i)
+        end
         spawnEntity('player', {
           playerNum = 1,
           color = COLOR.PURPLE,
@@ -1126,6 +1142,48 @@ function love.update(dt)
       end
     end
   elseif gameFrame > (DEBUG_SPEED_MODE and 0 or 390) then
+    if (not players[1] or players[1].health <= 0) and (not players[2] or players[2].health <= 0) then
+      gameOverFrames = gameOverFrames + 1
+    else
+      gameOverFrames = 0
+      numMashedButtons = 0
+    end
+    if gameOverFrames > 30 then
+      if playerControllers[1] and playerControllers[1]:justPressedAnything() then
+        numMashedButtons = numMashedButtons + 1
+      end
+      if playerControllers[2] and playerControllers[2]:justPressedAnything() then
+        numMashedButtons = numMashedButtons + 1
+      end
+    end
+    if gameOverFrames == 30 then
+      love.audio.play(sounds.duhdow:clone())
+    end
+    if gameOverFrames >= 600 then
+      gameOverFrames = 0
+      isShowingTitleScreen = true
+      gameFrame = 0
+      levelFrame = 0
+      entities = {}
+      newEntities = {}
+      for i = #players, 1, -1 do
+        table.remove(players, i)
+      end
+      for i = #baddies, 1, -1 do
+        table.remove(baddies, i)
+      end
+      for i = #obstacles, 1, -1 do
+        table.remove(obstacles, i)
+      end
+    elseif gameOverFrames >= 300 and numMashedButtons > 50 then
+      love.audio.play(sounds.ding:clone())
+      if players[1] then
+        players[1]:regenerate()
+      end
+      if players[2] then
+        players[2]:regenerate()
+      end
+    end
     if not players[2] and playerControllers[2] and playerControllers[2]:justPressedAnything() then
       spawnEntity('player', {
         playerNum = 2,
@@ -1406,7 +1464,7 @@ function love.draw()
       end
     end
     -- Draw instructions
-    if levelNumber <= STARTING_LEVEL_NUMBER - 1 or (levelNumber == STARTING_LEVEL_NUMBER and levelPhase ~= 'stopping') then
+    if (levelNumber <= STARTING_LEVEL_NUMBER - 1 or (levelNumber == STARTING_LEVEL_NUMBER and levelPhase ~= 'stopping')) and gameOverFrames <= 0 then
       local x = (#joystickControllers > 0) and 289 or 354
       love.graphics.setColor(COLOR.PURE_WHITE)
       if gameFrame > (DEBUG_SPEED_MODE and 0 or 70) then
@@ -1418,6 +1476,13 @@ function love.draw()
       if gameFrame > (DEBUG_SPEED_MODE and 0 or 230) then
         drawSprite(x, 271, 64, 38, 201, 95)
       end
+    end
+    love.graphics.setColor(COLOR.PURE_WHITE)
+    -- Draw victory
+    -- drawSprite(204, 433, 202, 63, 50, 80)
+    -- Draw failure
+    if (not players[1] or players[1].health <= 0) and (not players[2] or players[2].health <= 0) then
+      drawSprite(1, 433, 202, 63, 50, 80)
     end
     love.graphics.pop()
     -- Draw the game state
