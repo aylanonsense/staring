@@ -1,8 +1,8 @@
 ---
 main: main.lua
-name: staring [WIP]
-description: A game about staring for PlayNYC 2019!
-primaryColor: 0B0B04
+name: staring
+description: A game about harassment for Graffiti Games 2019 at PlayNYC!
+primaryColor: 4E4A49
 username: bridgs
 dimensions: 300x195
 coverImage: cover-image.png
