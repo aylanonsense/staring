@@ -2,7 +2,7 @@ local Controllers = require('src/Controller.lua')
 
 -- Constants
 local DEBUG_DRAW_MODE = false
-local DEBUG_SPEED_MODE = true
+local DEBUG_SPEED_MODE = false
 local COLOR = {
   LIGHT_GREY = { 191 / 255, 190 / 255, 190 / 255 }, -- #bfbebe
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
@@ -148,8 +148,9 @@ local LEVELS = {
     doors = 'top',
     beat = 20,
     pattern = {
+      { pause = 4 },
       { pause = 4, charge = 6, shoot = 4 },
-      { pause = 12 }
+      { pause = 4 }
     }
   },
   -- LEVEL 2
@@ -265,6 +266,7 @@ local joystickControllers
 local playerControllers
 
 -- Game variables
+local gameFrame
 local levelNumber
 local levelPhase
 local levelFrame
@@ -603,6 +605,16 @@ local ENTITY_CLASSES = {
       self.shadowSprite = isBig and 6 or 5
       self.eyeOffsetX = (self.bodyFlipped and -1 or 1) * BADDIE_SPRITES[self.bodySprite].x
       self.eyeOffsetY = -BADDIE_SPRITES[self.bodySprite].y
+      for i = 1, 25 do
+        spawnEntity('poof', {
+          x = self.x,
+          y = self.y,
+          size = 3,
+          angle = 2 * math.pi * math.random(),
+          duration = 0.25 + 0.10 * math.random(),
+          speed = 100 + 100 * math.random()
+        })
+      end
     end,
     update = function(self, dt)
       -- Advance attack stages
@@ -993,6 +1005,7 @@ local ENTITY_CLASSES = {
 }
 
 function love.load()
+  gameFrame = 0
   isShowingTitleScreen = true
   laserSchedule = {}
   shakeFrames = 0
@@ -1000,7 +1013,7 @@ function love.load()
   beatRate = 30
   levelNumber = 1
   stopNumber = 0
-  levelPhase = 'doors-opening'
+  levelPhase = 'stopping'
   levelFrame = 0
   -- Set default filter to nearest to allow crisp pixel art
   love.graphics.setDefaultFilter('nearest', 'nearest')
@@ -1011,25 +1024,10 @@ function love.load()
   mouseAndKeyboardController = Controllers.MouseAndKeyboardController:new()
   joystickControllers = {}
   playerControllers = { mouseAndKeyboardController, nil }
-  -- Spawn entities
-  entities = {}
-  newEntities = {}
-  spawnEntity('player', {
-    playerNum = 1,
-    color = COLOR.PURPLE,
-    x = GAME_WIDTH / 2 - 25,
-    y = GAME_HEIGHT / 2
-  })
-  spawnEntity('player', {
-    playerNum = 2,
-    color = COLOR.GREEN,
-    x = GAME_WIDTH / 2 + 25,
-    y = GAME_HEIGHT / 2
-  })
-  addNewEntitiesToGame()
 end
 
 function love.update(dt)
+  gameFrame = gameFrame + 1
   local level = LEVELS[levelNumber]
   -- Freeze the screen
   if freezeFrames > 0 then
@@ -1037,14 +1035,35 @@ function love.update(dt)
     return
   end
   shakeFrames = math.max(0, shakeFrames - 1)
-  levelFrame = levelFrame + 1
   if isShowingTitleScreen then
     for p = 1, 2 do
       if playerControllers[p] and playerControllers[p]:justPressedAnything() then
         isShowingTitleScreen = false
+        levelNumber = 0
+        levelPhase = 'stopping'
+        levelFrame = 0
+        gameFrame = 0
+        -- Spawn entities
+        entities = {}
+        newEntities = {}
+        spawnEntity('player', {
+          playerNum = 1,
+          color = COLOR.PURPLE,
+          x = GAME_WIDTH / 2 - 25,
+          y = GAME_HEIGHT / 2 + 10
+        })
+        spawnEntity('player', {
+          playerNum = 2,
+          aimX = -1,
+          color = COLOR.GREEN,
+          x = GAME_WIDTH / 2 + 25,
+          y = GAME_HEIGHT / 2 + 10
+        })
+        addNewEntitiesToGame()
       end
     end
-  else
+  elseif gameFrame > 390 then
+    levelFrame = levelFrame + 1
     -- Update level phase
     if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
       levelPhase = 'passengers-boarding'
@@ -1059,14 +1078,14 @@ function love.update(dt)
     elseif levelPhase == 'passengers-boarding' and numPassengersLeftToBoard <= 0 then
       levelPhase = 'doors-closing'
       levelFrame = 0
-    elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 0 or 60) then
+    elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 0 or 80) then
       stopNumber = stopNumber + 1
       levelPhase = 'in-transit'
       levelFrame = 0
     elseif levelPhase == 'in-transit' and #baddies <= 0 then
       levelPhase = 'stopping'
       levelFrame = 0
-    elseif levelPhase == 'stopping' and levelFrame > (DEBUG_SPEED_MODE and 0 or 30) then
+    elseif levelPhase == 'stopping' and levelFrame > (DEBUG_SPEED_MODE and 0 or 100) then
       levelNumber = levelNumber + 1
       laserSchedule = {}
       levelPhase = 'doors-opening'
@@ -1151,29 +1170,32 @@ function love.update(dt)
       end
     end
     -- Spawn passengers
-    if levelPhase == 'passengers-boarding' and levelFrame % (DEBUG_SPEED_MODE and 1 or 10) == 0 and numPassengersLeftToBoard > 0 then
-      -- Select a random seat
-      local maxPriority = 1
-      for attempt = 1, 100 do
-        maxPriority = maxPriority + 0.3
-        local seatNum = math.random(1, #SEATS)
-        local seat = SEATS[seatNum]
-        local priority = seat.priority
-        if seatNum > 1 and SEATS[seatNum - 1].passenger then
-          priority = priority + 2
-        end
-        if seatNum < #SEATS and SEATS[seatNum + 1].passenger then
-          priority = priority + 2
-        end
-        if not seat.passenger and priority <= maxPriority then
-          -- Spawn a passenger in that seat
-          numPassengersLeftToBoard = numPassengersLeftToBoard - 1
-          seat.passenger = spawnEntity('baddie', {
-            x = seat.x + math.random(-5, 5),
-            y = seat.y + math.random(-2, 2),
-            seat = seat
-          })
-          break
+    if level then
+      local spawnRate = DEBUG_SPEED_MODE and 1 or math.ceil(90 / level.numPassengers)
+      if levelPhase == 'passengers-boarding' and levelFrame % spawnRate == 0 and numPassengersLeftToBoard > 0 then
+        -- Select a random seat
+        local maxPriority = 1
+        for attempt = 1, 100 do
+          maxPriority = maxPriority + 0.3
+          local seatNum = math.random(1, #SEATS)
+          local seat = SEATS[seatNum]
+          local priority = seat.priority
+          if seatNum > 1 and SEATS[seatNum - 1].passenger then
+            priority = priority + 2
+          end
+          if seatNum < #SEATS and SEATS[seatNum + 1].passenger then
+            priority = priority + 2
+          end
+          if not seat.passenger and priority <= maxPriority then
+            -- Spawn a passenger in that seat
+            numPassengersLeftToBoard = numPassengersLeftToBoard - 1
+            seat.passenger = spawnEntity('baddie', {
+              x = seat.x + math.random(-5, 5),
+              y = seat.y + math.random(-2, 2),
+              seat = seat
+            })
+            break
+          end
         end
       end
     end
@@ -1215,14 +1237,19 @@ function love.update(dt)
 end
 
 function love.draw()
-  if isShowingTitleScreen then
+  if isShowingTitleScreen or gameFrame < 60 then
     -- Clear the screen
     love.graphics.clear(COLOR.DARK_GREY)
+    -- Draw title screen
     drawSprite(302, 1, 133, 106, 84, 20)
-    if levelFrame % 100 < 80 then
+    if levelFrame % 100 < 80 and isShowingTitleScreen then
       drawSprite(302, 108, 86, 15, 108, 145)
     end
     drawSprite(302, 124, 86, 6, 108, 180)
+    if not isShowingTitleScreen then
+      love.graphics.setColor(COLOR.WHITE[1], COLOR.WHITE[2], COLOR.WHITE[3], math.min(gameFrame / 20, 1))
+      love.graphics.rectangle('fill', 0, 0, 300, 195)
+    end
   else
     local level = LEVELS[levelNumber]
     local screenShakeX = 0
@@ -1236,76 +1263,78 @@ function love.draw()
     local shouldDrawHealthBars = playerChangedHealthRecently or (playerMissingHealth and (isAtStop or levelFrame % 280 > 140))
     -- Clear the screen
     love.graphics.clear(COLOR.WHITE)
-    -- Draw the background
     love.graphics.push()
     love.graphics.translate(screenShakeX, 0)
-    drawSprite(1, 1, 300, 183, 0, 9)
-    -- Draw player health
-    if shouldDrawHealthBars then
-      love.graphics.setColor(COLOR.PURE_WHITE)
-      drawSprite(196, 379, 90, 11, 106, 12)
-      for p = 1, #players do
-        local player = players[p]
-        love.graphics.setColor(COLOR.WHITE)
-        love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.max(player.health, player.delayedHealth) / 100), 5)
-        love.graphics.setColor(player.color)
-        love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.min(player.health, player.delayedHealth) / 100), 5)
-      end
-    -- Draw stop display
-    else
-      love.graphics.setColor(COLOR.LIGHT_GREY)
-      love.graphics.rectangle('fill', 116, 20, 71, 1)
-      love.graphics.setColor(COLOR.PURE_WHITE)
-      for i = 1, 7 do
-        local x = 103 + 11 * i
-        local y = 17
-        local stopFrame
-        if i < stopNumber then
-          stopFrame = 3
-        elseif i > stopNumber then
-          stopFrame = 1
-        else
-          stopFrame = 2
+    if gameFrame > 310 then
+      -- Draw the background
+      drawSprite(1, 1, 300, 183, 0, 9)
+      -- Draw player health
+      if shouldDrawHealthBars then
+        love.graphics.setColor(COLOR.PURE_WHITE)
+        drawSprite(196, 379, 90, 11, 106, 12)
+        for p = 1, #players do
+          local player = players[p]
+          love.graphics.setColor(COLOR.WHITE)
+          love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.max(player.health, player.delayedHealth) / 100), 5)
+          love.graphics.setColor(player.color)
+          love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.min(player.health, player.delayedHealth) / 100), 5)
         end
-        drawSprite(240 + 8 * (stopFrame - 1), 185, 7, 7, x, y)
-        if i == stopNumber and (not isAtStop or levelFrame % 60 < 40) then
-          drawSprite(isAtStop and 286 or 264, 185, 21, 7, x - 7, y - 7)
-        end
-      end
-    end
-    -- Draw doors
-    local doorSprite
-    if levelPhase == 'doors-opening' then
-      doorSprite = math.min(math.max(1, math.ceil(levelFrame / 7)), 5)
-    elseif levelPhase == 'passengers-boarding' then
-      doorSprite = 5
-    elseif levelPhase == 'doors-closing' then
-      doorSprite = math.min(math.max(0, 6 - math.ceil(levelFrame / 7)), 5)
-    else
-      doorSprite = 0
-    end
-    if doorSprite > 0 then
-      love.graphics.setColor(COLOR.PURE_WHITE)
-      local sx = 1 + 39 * (doorSprite - 1)
-      if level.doors == 'top' then
-        drawSprite(sx, 379, 38, 33, 60, 32)
-        drawSprite(sx, 379, 38, 33, 202, 32, true)
+      -- Draw stop display
       else
-        drawSprite(sx, 413, 38, 19, 60, 168)
-        drawSprite(sx, 413, 38, 19, 202, 168, true)
+        love.graphics.setColor(COLOR.LIGHT_GREY)
+        love.graphics.rectangle('fill', 116, 20, 71, 1)
+        love.graphics.setColor(COLOR.PURE_WHITE)
+        for i = 1, 7 do
+          local x = 103 + 11 * i
+          local y = 17
+          local stopFrame
+          if i < stopNumber then
+            stopFrame = 3
+          elseif i > stopNumber then
+            stopFrame = 1
+          else
+            stopFrame = 2
+          end
+          drawSprite(240 + 8 * (stopFrame - 1), 185, 7, 7, x, y)
+          if i == stopNumber and (not isAtStop or levelFrame % 60 < 40) then
+            drawSprite(isAtStop and 286 or 264, 185, 21, 7, x - 7, y - 7)
+          end
+        end
+      end
+      -- Draw doors
+      local doorSprite
+      if levelPhase == 'doors-opening' then
+        doorSprite = math.min(math.max(1, math.ceil(levelFrame / 7)), 5)
+      elseif levelPhase == 'passengers-boarding' then
+        doorSprite = 5
+      elseif levelPhase == 'doors-closing' then
+        doorSprite = math.min(math.max(0, 6 - math.ceil(levelFrame / 7)), 5)
+      else
+        doorSprite = 0
+      end
+      if doorSprite > 0 then
+        love.graphics.setColor(COLOR.PURE_WHITE)
+        local sx = 1 + 39 * (doorSprite - 1)
+        if level.doors == 'top' then
+          drawSprite(sx, 379, 38, 33, 60, 32)
+          drawSprite(sx, 379, 38, 33, 202, 32, true)
+        else
+          drawSprite(sx, 413, 38, 19, 60, 168)
+          drawSprite(sx, 413, 38, 19, 202, 168, true)
+        end
       end
     end
     -- Draw instructions
-    if levelNumber == 1 and levelPhase == 'in-transit' then
+    if levelNumber <= 0 or (levelNumber == 1 and levelPhase ~= 'stopping') then
       local x = (#joystickControllers > 0) and 289 or 354
       love.graphics.setColor(COLOR.PURE_WHITE)
-      if levelFrame > 60 then
+      if gameFrame > 70 then
         drawSprite(x, 193, 64, 38, 35, 95)
       end
-      if levelFrame > 120 then
+      if gameFrame > 150 then
         drawSprite(x, 232, 64, 38, 118, 75)
       end
-      if levelFrame > 180 then
+      if gameFrame > 230 then
         drawSprite(x, 271, 64, 38, 201, 95)
       end
     end
@@ -1318,11 +1347,13 @@ function love.draw()
       love.graphics.rectangle('line', 0, 0, GAME_WIDTH, GAME_HEIGHT)
     end
     -- Draw entities
-    for renderLayer = 1, 6 do
-      for _, entity in ipairs(entities) do
-        if not entity.renderLayer or entity.renderLayer == renderLayer then
-          love.graphics.setColor(COLOR.PURE_WHITE)
-          entity:draw(renderLayer)
+    if gameFrame > 390 then
+      for renderLayer = 1, 6 do
+        for _, entity in ipairs(entities) do
+          if not entity.renderLayer or entity.renderLayer == renderLayer then
+            love.graphics.setColor(COLOR.PURE_WHITE)
+            entity:draw(renderLayer)
+          end
         end
       end
     end
