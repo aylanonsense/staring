@@ -2,8 +2,8 @@ local Controllers = require('src/Controller.lua')
 
 -- Constants
 local DEBUG_DRAW_MODE = false
-local DEBUG_SPEED_MODE = false
-local STARTING_LEVEL_NUMBER = 5
+local DEBUG_SPEED_MODE = false  
+local STARTING_LEVEL_NUMBER = 1
 local COLOR = {
   LIGHT_GREY = { 191 / 255, 190 / 255, 190 / 255 }, -- #bfbebe
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
@@ -188,19 +188,6 @@ local LEVELS = {
   {
     numPassengers = 18,
     doors = 'top',
-    beat = 18,
-    pattern = {
-      { pause = 4, charge = 4, shoot = 12, angle = 90+30, rotation = -8, baddieMethod = 'upper-left' },
-      { pause = 8, charge = 4, shoot = 12, angle = 180+30, rotation = -8, baddieMethod = 'upper-right' },
-      { pause = 8, charge = 4, shoot = 12, angle = 270+30, rotation = -8, baddieMethod = 'lower-right' },
-      { pause = 8, charge = 4, shoot = 12, angle = 0+30, rotation = -8, baddieMethod = 'lower-left' },
-      { pause = 4 }
-    }
-  },
-  -- LEVEL 5
-  {
-    numPassengers = 24,
-    doors = 'top',
     beat = 20,
     pattern = {
       { pause = 2, charge = 2, shoot = 2, rotation = 1 },
@@ -212,6 +199,19 @@ local LEVELS = {
       { pause = 2, charge = 2, shoot = 2, rotation = 1 },
       { pause = 1, charge = 2, shoot = 2, rotation = -1 },
       { pause = 7 }
+    }
+  },
+  -- LEVEL 5
+  {
+    numPassengers = 20,
+    doors = 'top',
+    beat = 16,
+    pattern = {
+      { pause = 4, charge = 4, shoot = 12, angle = 90+30, rotation = -8, baddieMethod = 'upper-left' },
+      { pause = 8, charge = 4, shoot = 12, angle = 180+30, rotation = -8, baddieMethod = 'upper-right' },
+      { pause = 8, charge = 4, shoot = 12, angle = 270+30, rotation = -8, baddieMethod = 'lower-right' },
+      { pause = 8, charge = 4, shoot = 12, angle = 0+30, rotation = -8, baddieMethod = 'lower-left' },
+      { pause = 4 }
     }
   },
   -- LEVEL 6
@@ -318,7 +318,9 @@ local ENTITY_CLASSES = {
     invincibilityFrames = 0,
     damageFrames = 0,
     framesSinceStoppedMoving = 0,
+    loveFrames = 0,
     update = function(self, dt)
+      self.loveFrames = self.loveFrames - 1
       local controller = self:getController()
       self.framesSinceStoppedMoving = self.framesSinceStoppedMoving + 1
       self.damageFrames = math.max(0, self.damageFrames - 1)
@@ -452,9 +454,9 @@ local ENTITY_CLASSES = {
       local wasHealing = self.isHealing
       self.isHealing = false
       if self.target and self.target.type == 'player' then
-        if self.target:heal(dt) then
-          self.isHealing = true
-        end
+        self.target:heal(dt)
+        self.target.loveFrames = 3
+        self.isHealing = true
       end
       if self.isHealing and not wasHealing then
         self.healingNoise = sounds.awaw:clone()
@@ -464,7 +466,7 @@ local ENTITY_CLASSES = {
         love.audio.stop(self.healingNoise)
       end
       -- If healing, spawn hearts
-      if self.delayedHealth < self.health and self.framesSinceHealthChanged < 30 and self.framesAlive % 15 == 0 then
+      if ((self.delayedHealth < self.health and self.framesSinceHealthChanged < 30) or self.loveFrames > 0) and self.framesAlive % 15 == 0 then
         local isPurple = (#players <= 1 and self.playerNum == 1) or (#players > 1 and self.playerNum == 2)
         spawnEntity('poof', {
           x = self.x + 10 * math.random() - 5,
@@ -510,6 +512,11 @@ local ENTITY_CLASSES = {
           bodySprite = 1
         end
         drawSprite(1 + 24 * (bodySprite - 1), self.color == COLOR.PURPLE and 341 or 360, 23, 18, self.x - (flip and 10.5 or 12.5), self.y - 11, flip)
+        if self.isDashing then
+          for i = 1, 2 do
+            drawSprite(1 + 24 * (bodySprite - 1), self.color == COLOR.PURPLE and 341 or 360, 23, 18, self.x - self.vx * i / 60 - (flip and 10.5 or 12.5), self.y - self.vy * i / 60 - 11, flip)
+          end
+        end
         if DEBUG_DRAW_MODE then
           love.graphics.setColor(COLOR.DEBUG_BLUE)
           love.graphics.circle('line', self.x, self.y, self.radius)
@@ -1048,6 +1055,8 @@ local ENTITY_CLASSES = {
 }
 
 function love.load()
+  entities = {}
+  newEntities = {}
   numMashedButtons = 0
   gameOverFrames = 0
   gameFrame = 0
@@ -1072,6 +1081,7 @@ function love.load()
     brsh = love.audio.newSource('sfx/brsh.wav', 'static'),
     burp = love.audio.newSource('sfx/burp.wav', 'static'),
     bzew = love.audio.newSource('sfx/bzew.wav', 'static'),
+    doobida = love.audio.newSource('sfx/doobida.wav', 'static'),
     ding = love.audio.newSource('sfx/ding.wav', 'static'),
     duhdow = love.audio.newSource('sfx/duhdow.wav', 'static'),
     hanheer = love.audio.newSource('sfx/hanheer.wav', 'static'),
@@ -1108,7 +1118,7 @@ function love.update(dt)
     return
   end
   shakeFrames = math.max(0, shakeFrames - 1)
-  if isShowingTitleScreen then
+  if isShowingTitleScreen and gameFrame > 60 then
     for p = 1, 2 do
       if playerControllers[p] and playerControllers[p]:justPressedAnything() and isShowingTitleScreen then
         isShowingTitleScreen = false
@@ -1141,7 +1151,7 @@ function love.update(dt)
         addNewEntitiesToGame()
       end
     end
-  elseif gameFrame > (DEBUG_SPEED_MODE and 0 or 390) then
+  elseif not isShowingTitleScreen and gameFrame > (DEBUG_SPEED_MODE and 1 or 390) then
     if (not players[1] or players[1].health <= 0) and (not players[2] or players[2].health <= 0) then
       gameOverFrames = gameOverFrames + 1
     else
@@ -1179,9 +1189,11 @@ function love.update(dt)
       love.audio.play(sounds.ding:clone())
       if players[1] then
         players[1]:regenerate()
+        players[1].invincibilityFrames = 120
       end
       if players[2] then
         players[2]:regenerate()
+        players[2].invincibilityFrames = 120
       end
     end
     if not players[2] and playerControllers[2] and playerControllers[2]:justPressedAnything() then
@@ -1196,7 +1208,7 @@ function love.update(dt)
     end
     levelFrame = levelFrame + 1
     -- Update level phase
-    if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 80) then
+    if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 1 or 80) then
       levelPhase = 'passengers-boarding'
       if #players == 1 then
         players[1]:regenerate()
@@ -1210,7 +1222,7 @@ function love.update(dt)
       levelPhase = 'doors-closing'
       love.audio.play(sounds.kshoo:clone())
       levelFrame = 0
-    elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 0 or 90) then
+    elseif levelPhase == 'doors-closing' and levelFrame > (DEBUG_SPEED_MODE and 1 or 90) then
       stopNumber = stopNumber + 1
       love.audio.play(sounds.ding:clone())
       levelPhase = 'in-transit'
@@ -1218,15 +1230,41 @@ function love.update(dt)
     elseif levelPhase == 'in-transit' and #baddies <= 0 then
       levelPhase = 'stopping'
       levelFrame = 0
-    elseif levelPhase == 'stopping' and levelFrame > (DEBUG_SPEED_MODE and 0 or 100) then
-      levelNumber = levelNumber + 1
-      laserSchedule = {}
-      levelPhase = 'doors-opening'
-      love.audio.play(sounds.kshoo:clone())
-      levelFrame = 0
+    elseif levelPhase == 'stopping' and levelFrame > (DEBUG_SPEED_MODE and 1 or 100) then
+      if levelNumber == #LEVELS then
+        levelPhase = 'winning'
+        love.audio.play(sounds.ding:clone())
+        levelFrame = 0
+      else
+        levelNumber = levelNumber + 1
+        laserSchedule = {}
+        levelPhase = 'doors-opening'
+        love.audio.play(sounds.kshoo:clone())
+        levelFrame = 0
+      end
     end
     if levelPhase == 'passengers-boarding' and levelFrame == 110 then
       love.audio.play(sounds.hanheer:clone())
+    end
+    if levelPhase == 'winning' and levelFrame == 30 then
+      love.audio.play(sounds.doobida:clone())
+    end
+    if levelPhase == 'winning' and levelFrame >= 600 then
+      gameOverFrames = 0
+      isShowingTitleScreen = true
+      gameFrame = 0
+      levelFrame = 0
+      entities = {}
+      newEntities = {}
+      for i = #players, 1, -1 do
+        table.remove(players, i)
+      end
+      for i = #baddies, 1, -1 do
+        table.remove(baddies, i)
+      end
+      for i = #obstacles, 1, -1 do
+        table.remove(obstacles, i)
+      end
     end
     -- Schedule lasers
     if levelPhase == 'in-transit' then
@@ -1376,7 +1414,7 @@ function love.update(dt)
 end
 
 function love.draw()
-  if isShowingTitleScreen or gameFrame < (DEBUG_SPEED_MODE and 0 or 60) then
+  if isShowingTitleScreen or gameFrame < (DEBUG_SPEED_MODE and 1 or 60) then
     -- Clear the screen
     love.graphics.clear(COLOR.DARK_GREY)
     -- Draw title screen
@@ -1404,7 +1442,7 @@ function love.draw()
     love.graphics.clear(COLOR.WHITE)
     love.graphics.push()
     love.graphics.translate(screenShakeX, 0)
-    if gameFrame > (DEBUG_SPEED_MODE and 0 or 310) then
+    if gameFrame > (DEBUG_SPEED_MODE and 1 or 310) then
       -- Draw the background
       drawSprite(1, 1, 300, 183, 0, 9)
       -- Draw player health
@@ -1417,6 +1455,10 @@ function love.draw()
           love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.max(player.health, player.delayedHealth) / 100), 5)
           love.graphics.setColor(player.color)
           love.graphics.rectangle('fill', p == 1 and 117 or 165, 17, math.ceil(30 * math.min(player.health, player.delayedHealth) / 100), 5)
+        end
+        if #players <= 1 then
+          love.graphics.setColor(COLOR.DARK_GREY)
+          love.graphics.rectangle('fill', 150, 10, 47, 16)
         end
       -- Draw stop display
       else
@@ -1464,22 +1506,24 @@ function love.draw()
       end
     end
     -- Draw instructions
-    if (levelNumber <= STARTING_LEVEL_NUMBER - 1 or (levelNumber == STARTING_LEVEL_NUMBER and levelPhase ~= 'stopping')) and gameOverFrames <= 0 then
+    if (levelNumber <= STARTING_LEVEL_NUMBER - 1 or (levelNumber == STARTING_LEVEL_NUMBER and levelPhase ~= 'stopping')) and gameOverFrames <= 0 and levelPhase ~= 'winning' then
       local x = (#joystickControllers > 0) and 289 or 354
       love.graphics.setColor(COLOR.PURE_WHITE)
-      if gameFrame > (DEBUG_SPEED_MODE and 0 or 70) then
+      if gameFrame > (DEBUG_SPEED_MODE and 1 or 70) then
         drawSprite(x, 193, 64, 38, 35, 95)
       end
-      if gameFrame >(DEBUG_SPEED_MODE and 0 or 150) then
+      if gameFrame >(DEBUG_SPEED_MODE and 1 or 150) then
         drawSprite(x, 232, 64, 38, 118, 75)
       end
-      if gameFrame > (DEBUG_SPEED_MODE and 0 or 230) then
+      if gameFrame > (DEBUG_SPEED_MODE and 1 or 230) then
         drawSprite(x, 271, 64, 38, 201, 95)
       end
     end
     love.graphics.setColor(COLOR.PURE_WHITE)
     -- Draw victory
-    -- drawSprite(204, 433, 202, 63, 50, 80)
+    if levelPhase == 'winning' then
+      drawSprite(204, 433, 202, 63, 50, 80)
+    end
     -- Draw failure
     if (not players[1] or players[1].health <= 0) and (not players[2] or players[2].health <= 0) then
       drawSprite(1, 433, 202, 63, 50, 80)
@@ -1493,7 +1537,7 @@ function love.draw()
       love.graphics.rectangle('line', 0, 0, GAME_WIDTH, GAME_HEIGHT)
     end
     -- Draw entities
-    if gameFrame > (DEBUG_SPEED_MODE and 0 or 390) then
+    if gameFrame > (DEBUG_SPEED_MODE and 1 or 390) then
       for renderLayer = 1, 6 do
         for _, entity in ipairs(entities) do
           if not entity.renderLayer or entity.renderLayer == renderLayer then
