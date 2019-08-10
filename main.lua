@@ -3,6 +3,7 @@ local Controllers = require('src/Controller.lua')
 -- Constants
 local DEBUG_DRAW_MODE = false
 local DEBUG_SPEED_MODE = false
+local STARTING_LEVEL_NUMBER = 1
 local COLOR = {
   LIGHT_GREY = { 191 / 255, 190 / 255, 190 / 255 }, -- #bfbebe
   DARK_GREY = { 78 / 255, 74 / 255, 73 / 255 }, -- #4e4a49
@@ -190,10 +191,10 @@ local LEVELS = {
     beat = 18,
     pattern = {
       { pause = 4, charge = 4, shoot = 12, angle = 90+30, rotation = -8, baddieMethod = 'upper-left' },
-      { pause = 12, charge = 4, shoot = 12, angle = 180+30, rotation = -8, baddieMethod = 'upper-right' },
-      { pause = 12, charge = 4, shoot = 12, angle = 270+30, rotation = -8, baddieMethod = 'lower-right' },
-      { pause = 12, charge = 4, shoot = 12, angle = 0+30, rotation = -8, baddieMethod = 'lower-left' },
-      { pause = 8 }
+      { pause = 8, charge = 4, shoot = 12, angle = 180+30, rotation = -8, baddieMethod = 'upper-right' },
+      { pause = 8, charge = 4, shoot = 12, angle = 270+30, rotation = -8, baddieMethod = 'lower-right' },
+      { pause = 8, charge = 4, shoot = 12, angle = 0+30, rotation = -8, baddieMethod = 'lower-left' },
+      { pause = 4 }
     }
   },
   -- LEVEL 5
@@ -346,7 +347,7 @@ local ENTITY_CLASSES = {
       if controller:justStartedDashing() and self.dashCooldown <= 0.00 and self.damageFrames <= 0 and self.health > 0 then
         self.isAiming = false
         self.isDashing = true
-        love.audio.play(sounds.shoop:clone())
+        love.audio.play(sounds.zzp:clone())
         self.invincibilityFrames = math.max(60 * PLAYER_DASH_INVINCIBILITY, self.invincibilityFrames)
         self.dashDuration = PLAYER_DASH_DURATION
         self.dashCooldown = PLAYER_DASH_DURATION + PLAYER_DASH_COOLDOWN
@@ -446,8 +447,19 @@ local ENTITY_CLASSES = {
       self.pupilOffsetX = self.aimX
       self.pupilOffsetY = self.aimY
       -- Heal
+      local wasHealing = self.isHealing
+      self.isHealing = false
       if self.target and self.target.type == 'player' then
-        self.target:heal(dt)
+        if self.target:heal(dt) then
+          self.isHealing = true
+        end
+      end
+      if self.isHealing and not wasHealing then
+        self.healingNoise = sounds.awaw:clone()
+        love.audio.play(self.healingNoise)
+      end
+      if not self.isHealing and wasHealing and self.healingNoise then
+        love.audio.stop(self.healingNoise)
       end
       -- If healing, spawn hearts
       if self.delayedHealth < self.health and self.framesSinceHealthChanged < 30 and self.framesAlive % 15 == 0 then
@@ -573,6 +585,7 @@ local ENTITY_CLASSES = {
       if self.health < 100 and self.invincibilityFrames <= 0 then
         self.health = math.min(self.health + 14 * dt, 100)
         self.framesSinceHealthChanged = 0
+        return true
       end
     end
   },
@@ -635,7 +648,7 @@ local ENTITY_CLASSES = {
             self.attackPhase = 'shooting'
             self.framesUntilNextAttackPhase = self.shootFrames
             if self.aimNoise then
-              love.audio.pause(self.aimNoise)
+              love.audio.stop(self.aimNoise)
             end
             self.shootNoise = sounds.bzew:clone()
             love.audio.play(self.shootNoise)
@@ -765,7 +778,7 @@ local ENTITY_CLASSES = {
         love.audio.play(self.targetedNoise)
       end
       if not self.isBeingTargeted and self.targetedNoise then
-        love.audio.pause(self.targetedNoise)
+        love.audio.stop(self.targetedNoise)
       end
       -- Destroy if targeted for too long
       local targetMult
@@ -784,13 +797,13 @@ local ENTITY_CLASSES = {
       if self.timeSpentTargeted > 0.45 then
         self:destroy()
         if self.aimNoise then
-          love.audio.pause(self.aimNoise)
+          love.audio.stop(self.aimNoise)
         end
         if self.shootNoise then
-          love.audio.pause(self.shootNoise)
+          love.audio.stop(self.shootNoise)
         end
         if self.targetedNoise then
-          love.audio.pause(self.targetedNoise)
+          love.audio.stop(self.targetedNoise)
         end
         love.audio.play(sounds.pff:clone())
         shakeFrames = math.max(8, shakeFrames)
@@ -1039,7 +1052,7 @@ function love.load()
   shakeFrames = 0
   freezeFrames = 0
   beatRate = 30
-  levelNumber = 1
+  levelNumber = STARTING_LEVEL_NUMBER
   stopNumber = 0
   levelPhase = 'stopping'
   levelFrame = 0
@@ -1048,6 +1061,7 @@ function love.load()
   -- Load assets
   spriteSheet = love.graphics.newImage('img/sprite-sheet.png')
   sounds = {
+    awaw = love.audio.newSource('sfx/awaw.wav', 'static'),
     blomp = love.audio.newSource('sfx/blomp.wav', 'static'),
     bop = love.audio.newSource('sfx/bop.wav', 'static'),
     brr = love.audio.newSource('sfx/brr.wav', 'static'),
@@ -1060,6 +1074,7 @@ function love.load()
     pff = love.audio.newSource('sfx/pff.wav', 'static'),
     puh = love.audio.newSource('sfx/puh.wav', 'static'),
     shoop = love.audio.newSource('sfx/shoop.wav', 'static'),
+    zzp = love.audio.newSource('sfx/zzp.wav', 'static'),
   }
   -- Create controllers
   blankController = Controllers.BlankController:new()
@@ -1078,7 +1093,7 @@ function love.update(dt)
       love.audio.play(sounds.bop:clone())
     end
     if gameFrame == 390 then
-      love.audio.play(sounds.ding:clone())
+      love.audio.play(sounds.bop:clone())
     end
   end
   local level = LEVELS[levelNumber]
@@ -1093,7 +1108,8 @@ function love.update(dt)
       if playerControllers[p] and playerControllers[p]:justPressedAnything() then
         isShowingTitleScreen = false
         love.audio.play(sounds.ding:clone())
-        levelNumber = 0
+        levelNumber = STARTING_LEVEL_NUMBER - 1
+        stopNumber = STARTING_LEVEL_NUMBER - 1
         levelPhase = 'stopping'
         levelFrame = 0
         gameFrame = 0
@@ -1106,17 +1122,20 @@ function love.update(dt)
           x = GAME_WIDTH / 2 - 25,
           y = GAME_HEIGHT / 2 + 10
         })
-        -- spawnEntity('player', {
-        --   playerNum = 2,
-        --   aimX = -1,
-        --   color = COLOR.GREEN,
-        --   x = GAME_WIDTH / 2 + 25,
-        --   y = GAME_HEIGHT / 2 + 10
-        -- })
         addNewEntitiesToGame()
       end
     end
   elseif gameFrame > (DEBUG_SPEED_MODE and 0 or 390) then
+    if not players[2] and playerControllers[2] and playerControllers[2]:justPressedAnything() then
+      spawnEntity('player', {
+        playerNum = 2,
+        aimX = -1,
+        color = COLOR.GREEN,
+        x = GAME_WIDTH / 2 + 25,
+        y = GAME_HEIGHT / 2 + 10
+      })
+      love.audio.play(sounds.bop:clone())
+    end
     levelFrame = levelFrame + 1
     -- Update level phase
     if levelPhase == 'doors-opening' and levelFrame > (DEBUG_SPEED_MODE and 0 or 80) then
@@ -1158,7 +1177,7 @@ function love.update(dt)
         if task.pause then
           task.pause = task.pause - 1
         end
-        if task.shoot and not task.baddie and (not task.pause or task.pause <= level.beat or task.pause == 2 * level.beat or task.pause == 2 * level.beat - 1 or task.pause == 4 * level.beat or task.pause == 4 * level.beat - 1) then
+        if task.shoot and (not task.baddie or not task.baddie.isAlive) and (not task.pause or task.pause <= level.beat or task.pause == 2 * level.beat or task.pause == 2 * level.beat - 1 or task.pause == 4 * level.beat or task.pause == 4 * level.beat - 1) then
           if task.baddieMethod == 'upper' then
             task.baddie = getUpperBaddie()
           elseif task.baddieMethod == 'lower' then
@@ -1271,29 +1290,29 @@ function love.update(dt)
     addNewEntitiesToGame()
     -- Remove dead entities from the game
     removeDeadEntitiesFromGame()
-    -- Update controllers
-    mouseAndKeyboardController:update(dt)
-    for i = #joystickControllers, 1, -1 do
-      local controller = joystickControllers[i]
-      if not controller:isActive() then
-        table.remove(joystickControllers, i)
-      else
-        controller:update(dt)
-      end
+  end
+  -- Update controllers
+  mouseAndKeyboardController:update(dt)
+  for i = #joystickControllers, 1, -1 do
+    local controller = joystickControllers[i]
+    if not controller:isActive() then
+      table.remove(joystickControllers, i)
+    else
+      controller:update(dt)
     end
-    -- Try switching controllers after controller disconnects
-    if playerControllers[1] and not playerControllers[1]:isActive() then
-      if playerControllers[2] == mouseAndKeyboardController then
-        playerControllers[2] = nil
-      end
-      playerControllers[1] = mouseAndKeyboardController
+  end
+  -- Try switching controllers after controller disconnects
+  if playerControllers[1] and not playerControllers[1]:isActive() then
+    if playerControllers[2] == mouseAndKeyboardController then
+      playerControllers[2] = nil
     end
-    if playerControllers[2] and not playerControllers[2]:isActive() then
-      if playerControllers[1] == mouseAndKeyboardController then
-        playerControllers[2] = nil
-      else
-        playerControllers[2] = mouseAndKeyboardController
-      end
+    playerControllers[1] = mouseAndKeyboardController
+  end
+  if playerControllers[2] and not playerControllers[2]:isActive() then
+    if playerControllers[1] == mouseAndKeyboardController then
+      playerControllers[2] = nil
+    else
+      playerControllers[2] = mouseAndKeyboardController
     end
   end
 end
@@ -1387,7 +1406,7 @@ function love.draw()
       end
     end
     -- Draw instructions
-    if levelNumber <= 0 or (levelNumber == 1 and levelPhase ~= 'stopping') then
+    if levelNumber <= STARTING_LEVEL_NUMBER - 1 or (levelNumber == STARTING_LEVEL_NUMBER and levelPhase ~= 'stopping') then
       local x = (#joystickControllers > 0) and 289 or 354
       love.graphics.setColor(COLOR.PURE_WHITE)
       if gameFrame > (DEBUG_SPEED_MODE and 0 or 70) then
@@ -1569,65 +1588,49 @@ end
 
 function getUpperBaddie()
   return getBestBaddie(function(baddie)
-    if baddie.y <= 0.6 * GAME_HEIGHT then
-      return 35 * math.random() - baddie.y
-    end
+    return 35 * math.random() - baddie.y
   end)
 end
 
 function getLowerBaddie()
   return getBestBaddie(function(baddie)
-    if baddie.y >= 0.4 * GAME_HEIGHT then
-      return 35 * math.random() + baddie.y
-    end
+    return 35 * math.random() + baddie.y
   end)
 end
 
 function getLeftBaddie()
   return getBestBaddie(function(baddie)
-    if baddie.x <= 0.6 * GAME_WIDTH then
-      return 55 * math.random() - baddie.x
-    end
+    return 55 * math.random() - baddie.x
   end)
 end
 
 function getRightBaddie()
   return getBestBaddie(function(baddie)
-    if baddie.x >= 0.4 * GAME_WIDTH then
-      return 55 * math.random() + baddie.x
-    end
+    return 55 * math.random() + baddie.x
   end)
 end
 
 function getLowerLeftBaddie()
   return getBestBaddie(function(baddie)
-    if baddie.x <= 0.6 * GAME_WIDTH and baddie.y >= 0.4 * GAME_HEIGHT then
-      return 55 * math.random() - baddie.x + 35 * math.random() + baddie.y
-    end
+    return 55 * math.random() - baddie.x + 35 * math.random() + baddie.y
   end)
 end
 
 function getLowerRightBaddie()
   return getBestBaddie(function(baddie)
-    if baddie.x >= 0.4 * GAME_WIDTH and baddie.y >= 0.4 * GAME_HEIGHT then
-      return 55 * math.random() + baddie.x + 35 * math.random() + baddie.y
-    end
+    return 55 * math.random() + baddie.x + 35 * math.random() + baddie.y
   end)
 end
 
 function getUpperLeftBaddie()
   return getBestBaddie(function(baddie)
-    if baddie.x <= 0.6 * GAME_WIDTH and baddie.y <= 0.6 * GAME_HEIGHT then
-      return 55 * math.random() - baddie.x + 35 * math.random() - baddie.y
-    end
+    return 55 * math.random() - baddie.x + 35 * math.random() - baddie.y
   end)
 end
 
 function getUpperRightBaddie()
   return getBestBaddie(function(baddie)
-    if baddie.x >= 0.4 * GAME_WIDTH and baddie.y <= 0.6 * GAME_HEIGHT then
-      return 55 * math.random() + baddie.x + 35 * math.random() - baddie.y
-    end
+    return 55 * math.random() + baddie.x + 35 * math.random() - baddie.y
   end)
 end
 
